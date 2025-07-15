@@ -1,0 +1,66 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}Manage Accomplishment Report - Work Order System{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="mb-4"><i class="bi bi-file-earmark-text"></i> Accomplishment Report</h2>
+    <form method="get" class="row g-3 mb-4">
+        <div class="col-md-4">
+            {{ form.date_started|as_crispy_field }}
+        </div>
+        <div class="col-md-4">
+            {{ form.date_ended|as_crispy_field }}
+        </div>
+        <div class="col-md-4 align-self-end">
+            <button type="submit" class="btn btn-primary w-100">
+                <i class="bi bi-search"></i> Filter
+            </button>
+        </div>
+    </form>
+    {% if work_orders %}
+    <div class="table-responsive mb-4">
+        <table class="table table-bordered table-hover">
+            <thead class="table-light">
+                <tr>
+                    <th>Work Order ID</th>
+                    <th>Item</th>
+                    <th>Date & Time Requested</th>
+                    <th>Issue Description</th>
+                    <th>Status</th>
+                    <th>Remarks</th>
+                    <th>Date & Time Completed</th>
+                    <th>Assigned Technician</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for wo in work_orders %}
+                <tr>
+                    <td>WO-{{ wo.id|stringformat:"06d" }}</td>
+                    <td>{{ wo.item }}</td>
+                    <td>{{ wo.date_requested|date:'M d, Y H:i' }}</td>
+                    <td>{{ wo.issue_description }}</td>
+                    <td>{{ wo.get_status_display }}</td>
+                    <td>{{ wo.remarks|default:'-' }}</td>
+                    <td>{{ wo.date_completed|date:'M d, Y H:i' }}</td>
+                    <td>{{ wo.assigned_technician.user.get_full_name }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="text-center mb-4">
+        <form method="get" action="{% url 'export_accomplishment_report' %}" target="_blank">
+            <input type="hidden" name="date_started" value="{{ form.date_started.value }}">
+            <input type="hidden" name="date_ended" value="{{ form.date_ended.value }}">
+            <button type="submit" class="btn btn-success btn-lg">
+                <i class="bi bi-download"></i> Export Report
+            </button>
+        </form>
+    </div>
+    {% elif form.is_bound %}
+    <div class="alert alert-info">No completed work orders found for the selected period.</div>
+    {% endif %}
+</div>
+{% endblock %} 

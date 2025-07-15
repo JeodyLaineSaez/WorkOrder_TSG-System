@@ -1,0 +1,105 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}Create Work Order - Work Order System{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0">
+                    <i class="bi bi-plus-circle"></i> Create New Work Order Request
+                </h4>
+            </div>
+            <div class="card-body">
+                <form method="post" id="workOrderForm">
+                    {% csrf_token %}
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            {{ form.campus|as_crispy_field }}
+                        </div>
+                        <div class="col-md-6">
+                            {{ form.office|as_crispy_field }}
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            {{ form.item|as_crispy_field }}
+                        </div>
+                        <div class="col-md-6">
+                            {{ form.type|as_crispy_field }}
+                        </div>
+                    </div>
+                    <div class="row" id="otherTypeRow" style="display:none;">
+                        <div class="col-md-12">
+                            {{ form.other_type|as_crispy_field }}
+                        </div>
+                    </div>
+                    
+                    {{ form.issue_description|as_crispy_field }}
+                    
+                    <div class="d-flex justify-content-between">
+                        <a href="{% url 'dashboard' %}" class="btn btn-secondary">
+                            <i class="bi bi-arrow-left"></i> Back to Dashboard
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-circle"></i> Submit Request
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    // Handle campus change to update office options
+    $('#id_campus').change(function() {
+        var campusId = $(this).val();
+        var officeSelect = $('#id_office');
+        
+        // Clear current options
+        officeSelect.empty();
+        officeSelect.append('<option value="">Select Office</option>');
+        
+        if (campusId) {
+            // Fetch offices for selected campus
+            $.ajax({
+                url: '{% url "get_offices_by_campus" %}',
+                data: {
+                    'campus_id': campusId
+                },
+                success: function(data) {
+                    $.each(data.offices, function(index, office) {
+                        officeSelect.append(
+                            $('<option></option>').val(office.id).text(office.name)
+                        );
+                    });
+                }
+            });
+        }
+    });
+
+    // Show/hide 'other_type' textbox based on type selection
+    function toggleOtherType() {
+        var typeVal = $('#id_type').val();
+        if (typeVal === 'other') {
+            $('#otherTypeRow').show();
+            $('#id_other_type').show();
+        } else {
+            $('#otherTypeRow').hide();
+            $('#id_other_type').hide();
+            $('#id_other_type').val('');
+        }
+    }
+    $('#id_type').change(toggleOtherType);
+    toggleOtherType(); // Initial call in case of form errors
+});
+</script>
+{% endblock %} 

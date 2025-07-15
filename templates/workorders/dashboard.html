@@ -1,0 +1,219 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard - Work Order System{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-speedometer2"></i> Dashboard</h2>
+    <a href="{% url 'create_work_order' %}" class="btn btn-primary">
+        <i class="bi bi-plus-circle"></i> New Work Order
+    </a>
+</div>
+
+<!-- Statistics Cards -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card bg-primary text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title">Total Work Orders</h6>
+                        <h3 class="mb-0">{{ total_work_orders }}</h3>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="bi bi-clipboard-data fs-1"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card bg-success text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title">Completed</h6>
+                        <h3 class="mb-0">{{ completed_work_orders }}</h3>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="bi bi-check-circle fs-1"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card bg-warning text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title">Pending</h6>
+                        <h3 class="mb-0">{{ pending_work_orders }}</h3>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="bi bi-clock fs-1"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card bg-info text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title">Available Technicians</h6>
+                        <h3 class="mb-0">{{ available_technicians }}</h3>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="bi bi-people fs-1"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Work Orders Section -->
+<div class="card shadow">
+    <div class="card-header">
+        <div class="d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="bi bi-list-ul"></i> Work Orders</h5>
+            
+            <!-- Status Filter -->
+            <div class="btn-group" role="group">
+                <a href="{% url 'dashboard' %}" class="btn btn-outline-primary {% if not status_filter %}active{% endif %}">
+                    All
+                </a>
+                <a href="{% url 'dashboard' %}?status=pending" class="btn btn-outline-warning {% if status_filter == 'pending' %}active{% endif %}">
+                    Pending
+                </a>
+                <a href="{% url 'dashboard' %}?status=on_going" class="btn btn-outline-info {% if status_filter == 'on_going' %}active{% endif %}">
+                    On Going
+                </a>
+                <a href="{% url 'dashboard' %}?status=completed" class="btn btn-outline-success {% if status_filter == 'completed' %}active{% endif %}">
+                    Completed
+                </a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card-body">
+        {% if page_obj %}
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead class="table-light">
+                    <tr>
+                        <th>ID</th>
+                        <th>Item</th>
+                        <th>Campus</th>
+                        <th>Office</th>
+                        <th>Requested By</th>
+                        <th>Status</th>
+                        <th>Date Requested</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for work_order in page_obj %}
+                    <tr>
+                        <td>
+                            <span class="badge bg-secondary">WO-{{ work_order.id|stringformat:"06d" }}</span>
+                        </td>
+                        <td>{{ work_order.item }}</td>
+                        <td>{{ work_order.campus.name }}</td>
+                        <td>{{ work_order.office.name }}</td>
+                        <td>{{ work_order.requested_by.get_full_name }}</td>
+                        <td>
+                            {% if work_order.status == 'pending' %}
+                                <span class="badge bg-warning">Pending</span>
+                            {% elif work_order.status == 'on_going' %}
+                                <span class="badge bg-info">On Going</span>
+                            {% elif work_order.status == 'completed' %}
+                                <span class="badge bg-success">Completed</span>
+                            {% elif work_order.status == 'cancelled' %}
+                                <span class="badge bg-danger">Cancelled</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ work_order.date_requested|date:"M d, Y" }}</td>
+                        <td>
+                            <div class="btn-group btn-group-sm" role="group">
+                                <a href="{% url 'work_order_detail' work_order.id %}" class="btn btn-outline-primary">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                                {% if work_order.status != 'completed' %}
+                                    {% if user.is_tsg_staff %}
+                                        <a href="{% url 'export_work_order' work_order.id %}" class="btn btn-outline-success">
+                                            <i class="bi bi-download"></i>
+                                        </a>
+                                        <a href="{% url 'assign_work_order' work_order.id %}" class="btn btn-outline-warning">
+                                            <i class="bi bi-person-check"></i>
+                                        </a>
+                                        <a href="{% url 'update_work_order' work_order.id %}" class="btn btn-outline-info">
+                                            <i class="bi bi-pencil"></i>
+                                        </a>
+                                    {% else %}
+                                        {% if work_order.requested_by.id == user.id %}
+                                            <a href="{% url 'export_work_order' work_order.id %}" class="btn btn-outline-success">
+                                                <i class="bi bi-download"></i>
+                                            </a>
+                                            <a href="{% url 'update_work_order' work_order.id %}" class="btn btn-outline-info">
+                                                <i class="bi bi-pencil"></i>
+                                            </a>
+                                        {% endif %}
+                                    {% endif %}
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Pagination -->
+        {% if page_obj.has_other_pages %}
+        <nav aria-label="Work orders pagination">
+            <ul class="pagination justify-content-center">
+                {% if page_obj.has_previous %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if status_filter %}&status={{ status_filter }}{% endif %}">
+                        <i class="bi bi-chevron-left"></i>
+                    </a>
+                </li>
+                {% endif %}
+                
+                {% for num in page_obj.paginator.page_range %}
+                <li class="page-item {% if page_obj.number == num %}active{% endif %}">
+                    <a class="page-link" href="?page={{ num }}{% if status_filter %}&status={{ status_filter }}{% endif %}">{{ num }}</a>
+                </li>
+                {% endfor %}
+                
+                {% if page_obj.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if status_filter %}&status={{ status_filter }}{% endif %}">
+                        <i class="bi bi-chevron-right"></i>
+                    </a>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
+        
+        {% else %}
+        <div class="text-center py-5">
+            <i class="bi bi-inbox fs-1 text-muted"></i>
+            <h5 class="text-muted mt-3">No work orders found</h5>
+            <p class="text-muted">Create your first work order request to get started.</p>
+            <a href="{% url 'create_work_order' %}" class="btn btn-primary">
+                <i class="bi bi-plus-circle"></i> Create Work Order
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %} 
