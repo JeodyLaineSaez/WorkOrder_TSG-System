@@ -72,6 +72,12 @@ class WorkOrder(models.Model):
         ('lan_internet', 'LAN/Internet'),
         ('other', 'Others'),
     ]
+
+    CATEGORY_CHOICES = [
+        ('repair', 'Repair'),
+        ('maintenance', 'Maintenance'),
+        ('checkup', 'Checkup'),
+    ]
     
     # Request details
     campus = models.ForeignKey(Campus, on_delete=models.CASCADE, related_name='work_orders')
@@ -80,10 +86,12 @@ class WorkOrder(models.Model):
     type = models.CharField(max_length=20, choices=TYPE_CHOICES, default='desktop_laptop')
     other_type = models.CharField(max_length=100, blank=True, null=True, help_text="Specify if type is Others")
     issue_description = models.TextField(validators=[MinLengthValidator(10)])
+    serial_number = models.CharField(max_length=100, blank=True, null=True, help_text="Serial number of the item (optional)")
+    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default='Repair')
     
     # Request metadata
     requested_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='requested_work_orders')
-    date_requested = models.DateTimeField(auto_now_add=True)
+    date_requested = models.DateField(default=timezone.now)
     
     # Assignment details (TSG Staff only)
     assigned_technician = models.ForeignKey(ComputerTechnician, on_delete=models.SET_NULL, 

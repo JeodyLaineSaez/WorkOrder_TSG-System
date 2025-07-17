@@ -55,10 +55,22 @@ class WorkOrderForm(forms.ModelForm):
         widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Please specify', 'id': 'id_other_type', 'style': 'display:none;'}),
         label='If Others, please specify',
     )
+    serial_number = forms.CharField(
+        required=False,
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Serial Number (optional)'}),
+        label='Serial Number',
+    )
+    category = forms.ChoiceField(
+        choices=WorkOrder.CATEGORY_CHOICES,
+        widget=forms.Select(attrs={'class': 'form-control'}),
+        initial='repair',
+        label='Category',
+        required=True,
+    )
     
     class Meta:
         model = WorkOrder
-        fields = ['campus', 'office', 'item', 'type', 'other_type', 'issue_description']
+        fields = ['campus', 'office', 'item', 'type', 'other_type', 'serial_number', 'category', 'issue_description']
         widgets = {
             'item': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g., Computer, Printer, Network Device'}),
             'issue_description': forms.Textarea(attrs={
@@ -100,10 +112,27 @@ class WorkOrderUpdateForm(forms.ModelForm):
         widget=forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
         required=False
     )
+    date_requested = forms.DateField(
+        widget=forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+        required=True,
+        label='Date Requested',
+    )
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Store the original date_requested for validation
+        if self.instance and self.instance.pk:
+            self.original_date_requested = self.instance.date_requested
+        else:
+            self.original_date_requested = None
+    def clean_date_requested(self):
+        date_requested = self.cleaned_data['date_requested']
+        if self.original_date_requested and date_requested < self.original_date_requested:
+            raise forms.ValidationError('Date requested cannot be set before the original request date (%s).' % self.original_date_requested)
+        return date_requested
     
     class Meta:
         model = WorkOrder
-        fields = ['status', 'remarks']
+        fields = ['status', 'remarks', 'date_requested']
         widgets = {
             'status': forms.Select(attrs={'class': 'form-control'}),
         }
@@ -129,10 +158,22 @@ class WorkOrderUserUpdateForm(forms.ModelForm):
         widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Please specify', 'id': 'id_other_type', 'style': 'display:none;'}),
         label='If Others, please specify',
     )
+    serial_number = forms.CharField(
+        required=False,
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Serial Number (optional)'}),
+        label='Serial Number',
+    )
+    category = forms.ChoiceField(
+        choices=WorkOrder.CATEGORY_CHOICES,
+        widget=forms.Select(attrs={'class': 'form-control'}),
+        initial='repair',
+        label='Category',
+        required=True,
+    )
 
     class Meta:
         model = WorkOrder
-        fields = ['campus', 'office', 'item', 'type', 'other_type', 'issue_description']
+        fields = ['campus', 'office', 'item', 'type', 'other_type', 'serial_number', 'category', 'issue_description']
         widgets = {
             'item': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g., Computer, Printer, Network Device'}),
             'issue_description': forms.Textarea(attrs={
