@@ -17,6 +17,8 @@ from docxtpl import DocxTemplate
 import os
 from django import forms
 from django.utils import dateformat
+import csv
+from django.utils.encoding import smart_str
 
 class AccomplishmentReportForm(forms.Form):
     date_started = forms.DateField(widget=forms.DateInput(attrs={'type': 'date'}))
@@ -486,3 +488,33 @@ def edit_office_view(request, office_id):
     else:
         form = OfficeForm(instance=office)
     return render(request, 'workorders/edit_office.html', {'form': form, 'office': office})
+
+@login_required
+def export_work_orders_csv_view(request):
+    """Export all work orders (pending, on_going, completed) as CSV"""
+    work_orders = WorkOrder.objects.filter(status__in=['pending', 'on_going', 'completed']).order_by('id')
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = 'attachment; filename=work_orders.csv'
+    writer = csv.writer(response)
+    writer.writerow([
+        'Work Order ID', 'Campus', 'Office', 'Type', 'Item', 'Serial Number', 'Issue Description',
+        'Requested By', 'Date Requested', 'Assigned Technician', 'Category', 'Remarks', 'Date Completed', 'Status'
+    ])
+    for wo in work_orders:
+        writer.writerow([
+            f'WO-{wo.id:06d}',
+            smart_str(wo.campus.name),
+            smart_str(wo.office.name),
+            smart_str(wo.get_type_display() if hasattr(wo, 'get_type_display') else wo.type),
+            smart_str(wo.item),
+            smart_str(wo.serial_number or ''),
+            smart_str(wo.issue_description),
+            smart_str(wo.requested_by.get_full_name() if wo.requested_by else ''),
+            wo.date_requested.strftime('%Y-%m-%d') if wo.date_requested else '',
+            smart_str(wo.assigned_technician.user.get_full_name() if wo.assigned_technician else ''),
+            smart_str(wo.get_category_display() if hasattr(wo, 'get_category_display') else wo.category),
+            smart_str(wo.remarks or ''),
+            wo.date_completed.strftime('%Y-%m-%d %H:%M') if wo.date_completed else '',
+            smart_str(wo.get_status_display() if hasattr(wo, 'get_status_display') else wo.status),
+        ])
+    return response

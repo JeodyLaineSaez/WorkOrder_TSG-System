@@ -62,5 +62,10 @@
     {% elif form.is_bound %}
     <div class="alert alert-info">No completed work orders found for the selected period.</div>
     {% endif %}
+    {% if user.is_tsg_staff %}
+    <a href="{% url 'export_work_orders_csv' %}" class="btn btn-outline-success">
+        <i class="bi bi-file-earmark-spreadsheet"></i> Export Work Orders (CSV)
+    </a>
+    {% endif %}
 </div>
 {% endblock %} 

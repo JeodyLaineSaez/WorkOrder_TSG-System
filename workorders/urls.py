@@ -31,4 +31,5 @@ urlpatterns = [
     path('edit-technician/<int:technician_id>/', views.edit_technician_view, name='edit_technician'),
     path('edit-user/<int:user_id>/', views.edit_user_view, name='edit_user'),
     path('edit-office/<int:office_id>/', views.edit_office_view, name='edit_office'),
+    path('export-work-orders-csv/', views.export_work_orders_csv_view, name='export_work_orders_csv'),
 ] 
