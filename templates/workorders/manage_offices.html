@@ -21,6 +21,7 @@
                                 <th>Floor</th>
                                 <th>Room #</th>
                                 <th>Created At</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -31,6 +32,11 @@
                                 <td>{{ office.floor|default:'-' }}</td>
                                 <td>{{ office.room_number|default:'-' }}</td>
                                 <td>{{ office.created_at|date:'M d, Y' }}</td>
+                                <td>
+                                    <a href="{% url 'edit_office' office.id %}" class="btn btn-sm btn-outline-info" title="Edit Office">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                </td>
                             </tr>
                             {% endfor %}
                         </tbody>

@@ -41,7 +41,7 @@ class WorkOrderAdmin(admin.ModelAdmin):
     list_display = ('id', 'item', 'campus', 'office', 'requested_by', 'status', 'assigned_technician', 'date_requested')
     list_filter = ('status', 'type', 'campus', 'date_requested')
     search_fields = ('item', 'issue_description', 'requested_by__username', 'assigned_technician__user__username')
-    readonly_fields = ('date_requested', 'date_assigned', 'date_completed', 'created_at', 'updated_at')
+    readonly_fields = ('date_assigned', 'date_completed', 'created_at', 'updated_at')
     ordering = ('-created_at',)
     
     fieldsets = (
@@ -65,8 +65,8 @@ class WorkOrderAdmin(admin.ModelAdmin):
 
 @admin.register(WorkOrderHistory)
 class WorkOrderHistoryAdmin(admin.ModelAdmin):
-    list_display = ('work_order', 'changed_by', 'field_name', 'timestamp')
-    list_filter = ('field_name', 'timestamp')
+    list_display = ('work_order', 'changed_by', 'field_name', 'changed_at')
+    list_filter = ('field_name', 'changed_at')
     search_fields = ('work_order__item', 'changed_by__username')
-    readonly_fields = ('work_order', 'changed_by', 'field_name', 'old_value', 'new_value', 'timestamp')
-    ordering = ('-timestamp',)
+    readonly_fields = ('work_order', 'changed_by', 'field_name', 'old_value', 'new_value', 'changed_at')
+    ordering = ('-changed_at',)

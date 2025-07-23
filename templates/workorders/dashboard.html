@@ -170,6 +170,12 @@
                                             </a>
                                         {% endif %}
                                     {% endif %}
+                                {% else %}
+                                    {% if user.is_tsg_staff %}
+                                        <a href="{% url 'export_work_order' work_order.id %}" class="btn btn-outline-success">
+                                            <i class="bi bi-download"></i>
+                                        </a>
+                                    {% endif %}
                                 {% endif %}
                             </div>
                         </td>

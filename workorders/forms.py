@@ -1,7 +1,7 @@
 from django import forms
 from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
 from django.contrib.auth import authenticate
-from .models import User, WorkOrder, Campus, Office, ComputerTechnician
+from .models import User, WorkOrder, Campus, Office, ComputerTechnician, WorkOrderHistory
 
 class CustomUserCreationForm(UserCreationForm):
     """Custom user registration form"""
@@ -94,11 +94,17 @@ class WorkOrderForm(forms.ModelForm):
 class WorkOrderAssignmentForm(forms.ModelForm):
     """Form for TSG staff to assign technicians to work orders (no remarks field)"""
     assigned_technician = forms.ModelChoiceField(
-        queryset=ComputerTechnician.objects.filter(is_available=True),
+        queryset=ComputerTechnician.objects.all(),
         widget=forms.Select(attrs={'class': 'form-control'}),
         empty_label="Select Technician",
-        required=False
+        required=True
     )
+    status = forms.ChoiceField(
+        choices=WorkOrder.STATUS_CHOICES,
+        widget=forms.Select(attrs={'class': 'form-control'}),
+        required=True
+    )
+
     class Meta:
         model = WorkOrder
         fields = ['assigned_technician', 'status']
@@ -106,30 +112,41 @@ class WorkOrderAssignmentForm(forms.ModelForm):
             'status': forms.Select(attrs={'class': 'form-control'}),
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # If a technician is already assigned, disable the field to prevent reassignment
+        if self.instance and self.instance.pk and self.instance.assigned_technician:
+            self.fields['assigned_technician'].disabled = True
+
 class WorkOrderUpdateForm(forms.ModelForm):
     """Form for updating work order status and details"""
     remarks = forms.CharField(
         widget=forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
-        required=False
+        required=True
     )
     date_requested = forms.DateField(
         widget=forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
-        required=True,
-        label='Date Requested',
+        required=False
     )
+    requested_by_name = forms.CharField(
+        label='Requested By (Name)',
+        required=False,
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Edit requested by name'})
+    )
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Store the original date_requested for validation
         if self.instance and self.instance.pk:
-            self.original_date_requested = self.instance.date_requested
-        else:
-            self.original_date_requested = None
+            self.fields['requested_by_name'].initial = self.instance.requested_by.get_full_name() if self.instance.requested_by else ''
+
     def clean_date_requested(self):
         date_requested = self.cleaned_data['date_requested']
-        if self.original_date_requested and date_requested < self.original_date_requested:
-            raise forms.ValidationError('Date requested cannot be set before the original request date (%s).' % self.original_date_requested)
+        from django.utils import timezone
+        today = timezone.now().date()
+        if date_requested and date_requested < today:
+            raise forms.ValidationError('Date requested cannot be set before today (%s).' % today.strftime('%B %d, %Y'))
         return date_requested
-    
+
     class Meta:
         model = WorkOrder
         fields = ['status', 'remarks', 'date_requested']

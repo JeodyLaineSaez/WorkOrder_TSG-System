@@ -102,7 +102,7 @@ class WorkOrder(models.Model):
     
     # Status and tracking
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
-    remarks = models.TextField(blank=True, null=True)
+    remarks = models.TextField(max_length=150)
     date_completed = models.DateTimeField(null=True, blank=True)
     completed_by = models.ForeignKey(User, on_delete=models.SET_NULL, 
                                    related_name='completed_work_orders', null=True, blank=True)
@@ -128,17 +128,18 @@ class WorkOrder(models.Model):
         
         super().save(*args, **kwargs)
 
+
 class WorkOrderHistory(models.Model):
     """Track changes to work orders"""
-    work_order = models.ForeignKey(WorkOrder, on_delete=models.CASCADE, related_name='history')
-    changed_by = models.ForeignKey(User, on_delete=models.CASCADE)
-    field_name = models.CharField(max_length=50)
+    work_order = models.ForeignKey('WorkOrder', on_delete=models.CASCADE)
+    changed_by = models.ForeignKey('User', on_delete=models.SET_NULL, null=True)
+    field_name = models.CharField(max_length=100)
     old_value = models.TextField(blank=True, null=True)
     new_value = models.TextField(blank=True, null=True)
-    timestamp = models.DateTimeField(auto_now_add=True)
-    
+    changed_at = models.DateTimeField(auto_now_add=True)
+
     class Meta:
-        ordering = ['-timestamp']
-    
+        ordering = ['-changed_at']
+
     def __str__(self):
-        return f"{self.work_order} - {self.field_name} changed at {self.timestamp}"
+        return f"{self.work_order} - {self.field_name} changed at {self.changed_at}"

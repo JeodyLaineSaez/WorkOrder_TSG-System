@@ -28,4 +28,7 @@ urlpatterns = [
     
     # AJAX endpoints
     path('ajax/get-offices/', views.get_offices_by_campus, name='get_offices_by_campus'),
+    path('edit-technician/<int:technician_id>/', views.edit_technician_view, name='edit_technician'),
+    path('edit-user/<int:user_id>/', views.edit_user_view, name='edit_user'),
+    path('edit-office/<int:office_id>/', views.edit_office_view, name='edit_office'),
 ] 

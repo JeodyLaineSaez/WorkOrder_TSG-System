@@ -7,7 +7,7 @@ from django.db.models import Count, Q
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 from django.core.paginator import Paginator
-from .models import User, WorkOrder, Campus, Office, ComputerTechnician
+from .models import User, WorkOrder, Campus, Office, ComputerTechnician, WorkOrderHistory
 from .forms import (
     CustomUserCreationForm, CustomAuthenticationForm, WorkOrderForm,
     WorkOrderAssignmentForm, WorkOrderUpdateForm, CampusForm, OfficeForm,
@@ -119,10 +119,13 @@ def create_work_order_view(request):
 @login_required
 @user_passes_test(is_tsg_staff)
 def assign_work_order_view(request, work_order_id):
-    """TSG staff can assign technicians to work orders"""
+    """TSG staff can assign technicians to work orders. Once assigned, technician cannot be changed."""
     work_order = get_object_or_404(WorkOrder, id=work_order_id)
-    prev_technician = work_order.assigned_technician
-    prev_status = work_order.status
+
+    # If already assigned, do not allow editing
+    if work_order.assigned_technician:
+        messages.info(request, 'Technician has already been assigned to this work order and cannot be changed.')
+        return redirect('dashboard')
 
     if request.method == 'POST':
         form = WorkOrderAssignmentForm(request.POST, instance=work_order)
@@ -130,14 +133,6 @@ def assign_work_order_view(request, work_order_id):
             work_order = form.save(commit=False)
             work_order.assigned_by = request.user
             work_order.save()
-            # If status is set to 'on_going', set technician unavailable
-            if work_order.assigned_technician and work_order.status == 'on_going':
-                work_order.assigned_technician.is_available = False
-                work_order.assigned_technician.save()
-            # If technician changed or status changed from on_going/completed, set previous technician available
-            if prev_technician and prev_technician != work_order.assigned_technician and prev_status in ['on_going', 'completed']:
-                prev_technician.is_available = True
-                prev_technician.save()
             messages.success(request, 'Work order assigned successfully!')
             return redirect('dashboard')
     else:
@@ -154,6 +149,21 @@ def update_work_order_view(request, work_order_id):
     work_order = get_object_or_404(WorkOrder, id=work_order_id)
     prev_status = work_order.status
 
+    # --- BEGIN: Track original values for change history ---
+    original_values = {}
+    tracked_fields = [
+        'campus', 'office', 'item', 'type', 'other_type', 'issue_description', 'serial_number', 'category',
+        'assigned_technician', 'assigned_by', 'date_assigned', 'status', 'remarks', 'date_completed', 'completed_by'
+    ]
+    for field in tracked_fields:
+        value = getattr(work_order, field)
+        # For ForeignKey fields, store the pk (or None)
+        if hasattr(value, 'pk'):
+            original_values[field] = value.pk if value else None
+        else:
+            original_values[field] = value
+    # --- END: Track original values for change history ---
+
     if request.user.is_tsg_staff():
         form_class = WorkOrderUpdateForm
     else:
@@ -167,8 +177,72 @@ def update_work_order_view(request, work_order_id):
         form = form_class(request.POST, instance=work_order)
         if form.is_valid():
             work_order = form.save(commit=False)
+            # If TSG staff, update requested_by if requested_by_name is changed
+            if request.user.is_tsg_staff() and hasattr(form, 'cleaned_data') and 'requested_by_name' in form.cleaned_data:
+                requested_by_name = form.cleaned_data['requested_by_name'].strip()
+                if requested_by_name:
+                    # Try to find a user with this full name, else create a new user
+                    first_name, *last_name = requested_by_name.split(' ', 1)
+                    last_name = last_name[0] if last_name else ''
+                    user_qs = User.objects.filter(first_name=first_name, last_name=last_name)
+                    if user_qs.exists():
+                        work_order.requested_by = user_qs.first()
+                    else:
+                        # Create a new user with a unique username
+                        from django.utils.text import slugify
+                        base_username = slugify(f"{first_name}{last_name}")[:30]
+                        username = base_username
+                        counter = 1
+                        while User.objects.filter(username=username).exists():
+                            username = f"{base_username}{counter}"
+                            counter += 1
+                        new_user = User.objects.create(
+                            username=username,
+                            first_name=first_name,
+                            last_name=last_name,
+                            user_type='standard_user',
+                        )
+                        work_order.requested_by = new_user
             if request.user.is_tsg_staff() and work_order.status == 'completed':
                 work_order.completed_by = request.user
+            
+            # --- BEGIN: Compare and record changes ---
+            for field in tracked_fields:
+                old = original_values[field]
+                new = getattr(work_order, field)
+                # For ForeignKey fields, compare pk
+                if hasattr(new, 'pk'):
+                    new_val = new.pk if new else None
+                else:
+                    new_val = new
+                if old != new_val:
+                    # For display, get readable values for FKs
+                    model_field = work_order._meta.get_field(field)
+                    related_model = getattr(model_field, 'related_model', None)
+                    if related_model is not None:
+                        old_obj = related_model.objects.filter(pk=old).first() if old else None
+                        new_obj = related_model.objects.filter(pk=new_val).first() if new_val else None
+                        if field in ['assigned_by', 'completed_by']:
+                            old_disp = old_obj.username if old_obj else ''
+                            new_disp = new_obj.username if new_obj else ''
+                        elif field in ['assigned_technician']:
+                            old_disp = str(old_obj) if old_obj else ''
+                            new_disp = str(new_obj) if new_obj else ''
+                        else:
+                            old_disp = getattr(old_obj, 'name', str(old_obj)) if old_obj else ''
+                            new_disp = getattr(new_obj, 'name', str(new_obj)) if new_obj else ''
+                    else:
+                        old_disp = old
+                        new_disp = new_val
+                    WorkOrderHistory.objects.create(
+                        work_order=work_order,
+                        changed_by=request.user,
+                        field_name=field,
+                        old_value=old_disp,
+                        new_value=new_disp,
+                    )
+            # --- END: Compare and record changes ---
+            
             work_order.save()
             # If status changed to completed, set technician available
             if work_order.assigned_technician and prev_status != 'completed' and work_order.status == 'completed':
@@ -370,3 +444,45 @@ def export_work_order_view(request, work_order_id):
     response['Content-Disposition'] = f'attachment; filename=work_order_{work_order.id}.docx'
     doc.save(response)
     return response
+
+@login_required
+@user_passes_test(is_tsg_staff)
+def edit_technician_view(request, technician_id):
+    technician = get_object_or_404(ComputerTechnician, id=technician_id)
+    if request.method == 'POST':
+        form = ComputerTechnicianForm(request.POST, instance=technician)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Technician updated successfully!')
+            return redirect('manage_technicians')
+    else:
+        form = ComputerTechnicianForm(instance=technician)
+    return render(request, 'workorders/edit_technician.html', {'form': form, 'technician': technician})
+
+@login_required
+@user_passes_test(is_tsg_staff)
+def edit_user_view(request, user_id):
+    user = get_object_or_404(User, id=user_id)
+    if request.method == 'POST':
+        form = CustomUserCreationForm(request.POST, instance=user)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'User updated successfully!')
+            return redirect('manage_users')
+    else:
+        form = CustomUserCreationForm(instance=user)
+    return render(request, 'workorders/edit_user.html', {'form': form, 'user_obj': user})
+
+@login_required
+@user_passes_test(is_tsg_staff)
+def edit_office_view(request, office_id):
+    office = get_object_or_404(Office, id=office_id)
+    if request.method == 'POST':
+        form = OfficeForm(request.POST, instance=office)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Office updated successfully!')
+            return redirect('manage_offices')
+    else:
+        form = OfficeForm(instance=office)
+    return render(request, 'workorders/edit_office.html', {'form': form, 'office': office})

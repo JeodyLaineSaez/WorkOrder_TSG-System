@@ -20,6 +20,7 @@
                                 <th>Specialization</th>
                                 <th>Available</th>
                                 <th>Created At</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -35,6 +36,11 @@
                                     {% endif %}
                                 </td>
                                 <td>{{ tech.created_at|date:'M d, Y' }}</td>
+                                <td>
+                                    <a href="{% url 'edit_technician' tech.id %}" class="btn btn-sm btn-outline-info" title="Edit Technician">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                </td>
                             </tr>
                             {% endfor %}
                         </tbody>
