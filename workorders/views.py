@@ -342,22 +342,33 @@ def manage_users_view(request):
 @login_required
 @user_passes_test(is_tsg_staff)
 def manage_accomplishment_report_view(request):
-    form = AccomplishmentReportForm(request.GET or None)
-    work_orders = []
-    if form.is_valid():
-        date_started = form.cleaned_data['date_started']
-        date_ended = form.cleaned_data['date_ended']
-        work_orders = WorkOrder.objects.filter(
-            assigned_technician__user=request.user,
-            status='completed',
-            date_completed__date__gte=date_started,
-            date_completed__date__lte=date_ended
-        ).order_by('date_completed')
-    context = {
-        'form': form,
+    """Manage accomplishment report with date filter (no AccomplishmentReportForm)"""
+    from .models import WorkOrder, ComputerTechnician
+    work_orders = WorkOrder.objects.filter(status='completed')
+    date_started = request.GET.get('date_started')
+    date_ended = request.GET.get('date_ended')
+    technician_id = request.GET.get('technician')
+    if date_started and date_ended:
+        work_orders = work_orders.filter(date_requested__range=[date_started, date_ended])
+    if technician_id:
+        work_orders = work_orders.filter(assigned_technician_id=technician_id)
+    # --- CHANGE: Only show current user's ComputerTechnician and 'All Technicians' if TSG staff ---
+    if request.user.is_tsg_staff():
+        user_tech = ComputerTechnician.objects.filter(user=request.user)
+        if user_tech.exists():
+            technicians = list(user_tech)
+        else:
+            technicians = []
+        # Add a dummy for 'All Technicians' (handled in template)
+        show_all = True
+    else:
+        technicians = []
+        show_all = False
+    return render(request, 'workorders/manage_accomplishment_report.html', {
         'work_orders': work_orders,
-    }
-    return render(request, 'workorders/manage_accomplishment_report.html', context)
+        'technicians': technicians,
+        'show_all': show_all,
+    })
 
 @login_required
 @user_passes_test(is_tsg_staff)
@@ -368,30 +379,42 @@ def export_accomplishment_report_view(request):
         return redirect('manage_accomplishment_report')
     date_started = form.cleaned_data['date_started']
     date_ended = form.cleaned_data['date_ended']
+    technician_id = request.GET.get('technician')
     work_orders = WorkOrder.objects.filter(
-        assigned_technician__user=request.user,
         status='completed',
         date_completed__date__gte=date_started,
         date_completed__date__lte=date_ended
-    ).order_by('date_completed')
-
-    # Prepare context for docxtpl
+    )
+    if technician_id:
+        work_orders = work_orders.filter(assigned_technician_id=technician_id)
+    work_orders = work_orders.order_by('date_completed')
     table = []
     for wo in work_orders:
         table.append({
             'date_completed': dateformat.format(wo.date_completed, 'M d, Y H:i') if wo.date_completed else '',
+            'category': wo.get_category_display(),
             'issue_description': wo.issue_description,
             'requested_by': wo.requested_by.get_full_name(),
             'remarks': wo.remarks or '',
         })
-    context = {
-        'name': request.user.get_full_name().upper(),
-        'date_started': date_started.strftime('%B %d, %Y'),
-        'date_ended': date_ended.strftime('%B %d, %Y'),
-        'date_today': timezone.now().strftime('%B %d, %Y'),
-        'table': table,
-    }
-    template_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static', 'ACCOMPLISHMENT_STAFF.docx')
+    # --- CHANGE: Use different template and context for TSG head if all technicians selected ---
+    if not technician_id:
+        template_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static', 'ACCOMPLISHMENT_HEAD.docx')
+        context = {
+            'date_started': date_started.strftime('%B %d, %Y'),
+            'date_ended': date_ended.strftime('%B %d, %Y'),
+            'date_today': timezone.now().strftime('%B %d, %Y'),
+            'table': table,
+        }
+    else:
+        template_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static', 'ACCOMPLISHMENT_STAFF.docx')
+        context = {
+            'name': request.user.get_full_name().upper(),
+            'date_started': date_started.strftime('%B %d, %Y'),
+            'date_ended': date_ended.strftime('%B %d, %Y'),
+            'date_today': timezone.now().strftime('%B %d, %Y'),
+            'table': table,
+        }
     doc = DocxTemplate(template_path)
     doc.render(context)
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
@@ -439,6 +462,8 @@ def export_work_order_view(request, work_order_id):
         'wo_remark': work_order.remarks or '',
         'wo_datetime_completed': work_order.date_completed.strftime('%Y-%m-%d %H:%M') if work_order.date_completed else '',
         'wo_assigned_technician': work_order.assigned_technician.user.get_full_name() if work_order.assigned_technician else '',
+        'wo': work_order,
+        'action_taken': work_order.get_category_display(),
     }
     doc.render(context)
 
@@ -491,8 +516,13 @@ def edit_office_view(request, office_id):
 
 @login_required
 def export_work_orders_csv_view(request):
-    """Export all work orders (pending, on_going, completed) as CSV"""
+    """Export all work orders (pending, on_going, completed) as CSV, filtered by date_requested if date_started and date_ended are provided"""
+    # --- CHANGE: Filter by date_requested if date_started and date_ended are provided ---
     work_orders = WorkOrder.objects.filter(status__in=['pending', 'on_going', 'completed']).order_by('id')
+    date_started = request.GET.get('date_started')
+    date_ended = request.GET.get('date_ended')
+    if date_started and date_ended:
+        work_orders = work_orders.filter(date_requested__range=[date_started, date_ended])
     response = HttpResponse(content_type='text/csv')
     response['Content-Disposition'] = 'attachment; filename=work_orders.csv'
     writer = csv.writer(response)

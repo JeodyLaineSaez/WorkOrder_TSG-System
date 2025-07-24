@@ -77,6 +77,13 @@ class WorkOrder(models.Model):
         ('repair', 'Repair'),
         ('maintenance', 'Maintenance'),
         ('checkup', 'Checkup'),
+        ('cleaning', 'Cleaning'),
+        ('data_backup_recovery', 'Data Backup and Recovery'),
+        ('installation_setup', 'Installation and Setup'),
+        ('reformatting_reinstallation', 'Reformatting and Reinstallation'),
+        ('replacement', 'Replacement'),
+        ('relocation_reassignment', 'Relocation/Reassignment'),
+        ('update_upgrade_software', 'Update/Upgrade Software'),
     ]
     
     # Request details
@@ -87,7 +94,7 @@ class WorkOrder(models.Model):
     other_type = models.CharField(max_length=100, blank=True, null=True, help_text="Specify if type is Others")
     issue_description = models.TextField(validators=[MinLengthValidator(10)])
     serial_number = models.CharField(max_length=100, blank=True, null=True, help_text="Serial number of the item (optional)")
-    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default='Repair')
+    category = models.CharField(max_length=30, choices=CATEGORY_CHOICES, default='repair')
     
     # Request metadata
     requested_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='requested_work_orders')
