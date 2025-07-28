@@ -131,20 +131,28 @@ class WorkOrderUpdateForm(forms.ModelForm):
     requested_by_name = forms.CharField(
         label='Requested By (Name)',
         required=False,
-        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Edit requested by name'})
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Edit requested by name', 'readonly': 'readonly'})
     )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.instance and self.instance.pk:
             self.fields['requested_by_name'].initial = self.instance.requested_by.get_full_name() if self.instance.requested_by else ''
+            # Make requested_by_name readonly for TSG staff
+            self.fields['requested_by_name'].widget.attrs['readonly'] = True
+            # Set initial value for date_requested
+            self.fields['date_requested'].initial = self.instance.date_requested
 
     def clean_date_requested(self):
-        date_requested = self.cleaned_data['date_requested']
-        from django.utils import timezone
-        today = timezone.now().date()
-        if date_requested and date_requested < today:
-            raise forms.ValidationError('Date requested cannot be set before today (%s).' % today.strftime('%B %d, %Y'))
+        date_requested = self.cleaned_data.get('date_requested')
+        if self.instance and self.instance.pk:
+            original_date = self.instance.date_requested
+            # If the date is not changed, allow it (even if in the past)
+            if date_requested == original_date:
+                return date_requested
+            # If changed, do not allow setting to a date before the original date
+            if date_requested and date_requested < original_date:
+                raise forms.ValidationError('Date requested cannot be set before the original request date (%s).' % original_date.strftime('%B %d, %Y'))
         return date_requested
 
     class Meta:

@@ -19,6 +19,7 @@ from django import forms
 from django.utils import dateformat
 import csv
 from django.utils.encoding import smart_str
+from datetime import timedelta
 
 class AccomplishmentReportForm(forms.Form):
     date_started = forms.DateField(widget=forms.DateInput(attrs={'type': 'date'}))
@@ -100,6 +101,42 @@ def dashboard_view(request):
         'status_filter': status_filter,
     }
 
+    # Date filtering
+    period = request.GET.get("period", "week")
+    today = timezone.now().date()
+
+    if period == "month":
+        start_date = today.replace(day=1)
+    elif period == "year":
+        start_date = today.replace(month=1, day=1)
+    else:  # default to week
+        start_date = today - timedelta(days=7)
+
+    # Technician filter
+    technician_id = request.GET.get("technician", "all")
+    all_technicians = ComputerTechnician.objects.select_related('user').all()
+    context["all_technicians"] = all_technicians
+    context["selected_technician"] = technician_id
+
+    work_orders = WorkOrder.objects.filter(date_requested__gte=start_date)
+    if technician_id != "all":
+        work_orders = work_orders.filter(assigned_technician_id=technician_id)
+
+    # Group by technician and status by day
+    chart_data = {}
+    for status in ['pending', 'on_going', 'completed']:
+        status_qs = work_orders.filter(status=status)
+        for wo in status_qs:
+            date = wo.date_requested.strftime('%Y-%m-%d')
+            tech = wo.assigned_technician.user.get_full_name() if wo.assigned_technician else "Unassigned"
+            if technician_id != "all":
+                tech = all_technicians.get(id=int(technician_id)).user.get_full_name() if wo.assigned_technician else "Unassigned"
+            chart_data.setdefault(tech, {}).setdefault(date, {"pending": 0, "on_going": 0, "completed": 0})
+            chart_data[tech][date][status] += 1
+
+    context["chart_data"] = chart_data
+    context["period"] = period
+    
     return render(request, 'workorders/dashboard.html', context)
 
 @login_required
@@ -110,6 +147,7 @@ def create_work_order_view(request):
         if form.is_valid():
             work_order = form.save(commit=False)
             work_order.requested_by = request.user
+            work_order.date_requested = timezone.now()  # Ensure actual submission time
             work_order.save()
             messages.success(request, 'Work order request created successfully!')
             return redirect('dashboard')
@@ -179,6 +217,13 @@ def update_work_order_view(request, work_order_id):
         form = form_class(request.POST, instance=work_order)
         if form.is_valid():
             work_order = form.save(commit=False)
+            # For TSG staff, prevent date_requested/requested_by from being changed
+            if request.user.is_tsg_staff():
+                work_order.date_requested = work_order.__class__.objects.get(pk=work_order.pk).date_requested
+                work_order.requested_by = work_order.__class__.objects.get(pk=work_order.pk).requested_by
+            # If status is set to completed, set date_completed to now
+            if work_order.status == 'completed':
+                work_order.date_completed = timezone.now()
             # If TSG staff, update requested_by if requested_by_name is changed
             if request.user.is_tsg_staff() and hasattr(form, 'cleaned_data') and 'requested_by_name' in form.cleaned_data:
                 requested_by_name = form.cleaned_data['requested_by_name'].strip()
@@ -458,7 +503,7 @@ def export_work_order_view(request, work_order_id):
         'wo_equip_type': work_order.get_type_display() if hasattr(work_order, 'get_type_display') else work_order.type,
         'wo_description': work_order.issue_description,
         'wo_requested_by': work_order.requested_by.get_full_name(),
-        'wo_status': work_order.get_status_display() if hasattr(work_order, 'get_status_display') else work_order.status,
+        'wo_category': work_order.get_category_display() if hasattr(work_order, 'get_category_display') else work_order.category,
         'wo_remark': work_order.remarks or '',
         'wo_datetime_completed': work_order.date_completed.strftime('%Y-%m-%d %H:%M') if work_order.date_completed else '',
         'wo_assigned_technician': work_order.assigned_technician.user.get_full_name() if work_order.assigned_technician else '',

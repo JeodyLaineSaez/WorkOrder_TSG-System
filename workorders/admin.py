@@ -41,12 +41,12 @@ class WorkOrderAdmin(admin.ModelAdmin):
     list_display = ('id', 'item', 'campus', 'office', 'requested_by', 'status', 'assigned_technician', 'date_requested')
     list_filter = ('status', 'type', 'campus', 'date_requested')
     search_fields = ('item', 'issue_description', 'requested_by__username', 'assigned_technician__user__username')
-    readonly_fields = ('date_assigned', 'date_completed', 'created_at', 'updated_at')
+    readonly_fields = ('date_assigned', 'created_at', 'updated_at')
     ordering = ('-created_at',)
     
     fieldsets = (
         ('Request Information', {
-            'fields': ('campus', 'office', 'item', 'type', 'other_type', 'issue_description')
+            'fields': ('campus', 'office', 'item', 'type', 'other_type', 'issue_description', 'category')
         }),
         ('Request Details', {
             'fields': ('requested_by', 'date_requested')

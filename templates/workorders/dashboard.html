@@ -226,4 +226,120 @@
         {% endif %}
     </div>
 </div>
-{% endblock %} 
+
+<!-- Analytics Section -->
+<hr class="my-5">
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h5><i class="bi bi-graph-up"></i> Technician Work Order Analytics</h5>
+    <form method="get" class="d-flex align-items-center gap-2">
+        <label for="period" class="me-2">View by:</label>
+        <select name="period" id="period" onchange="this.form.submit()" class="form-select d-inline-block w-auto">
+            <option value="week" {% if period == "week" %}selected{% endif %}>This Week</option>
+            <option value="month" {% if period == "month" %}selected{% endif %}>This Month</option>
+            <option value="year" {% if period == "year" %}selected{% endif %}>This Year</option>
+        </select>
+        <label for="technician" class="ms-3 me-2">Technician:</label>
+        <select name="technician" id="technician" onchange="this.form.submit()" class="form-select d-inline-block w-auto">
+            <option value="all" {% if selected_technician == "all" %}selected{% endif %}>All Technicians</option>
+            {% for tech in all_technicians %}
+                <option value="{{ tech.id }}" {% if selected_technician|add:'0' == tech.id|stringformat:'d' %}selected{% endif %}>{{ tech.user.get_full_name }}</option>
+            {% endfor %}
+        </select>
+    </form>
+</div>
+
+<canvas id="technicianChart" height="120"></canvas>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    // Prepare chart data from Django context
+    const chartData = {{ chart_data|safe }};
+    const period = '{{ period }}';
+    const selectedTechnician = '{{ selected_technician }}';
+
+    // Get all dates in the period
+    function getAllDates(chartData) {
+        const dateSet = new Set();
+        Object.values(chartData).forEach(techData => {
+            Object.keys(techData).forEach(date => dateSet.add(date));
+        });
+        return Array.from(dateSet).sort();
+    }
+    const allDates = getAllDates(chartData);
+
+    // Get technician names (should be only one if filtered, or all if 'all')
+    const techNames = Object.keys(chartData);
+
+    // Prepare datasets for each status
+    const statuses = ['pending', 'on_going', 'completed'];
+    const statusLabels = {
+        'pending': 'Pending',
+        'on_going': 'On Going',
+        'completed': 'Completed'
+    };
+    const statusColors = {
+        'pending': 'rgba(255, 193, 7, 1)', // yellow
+        'on_going': 'rgba(23, 162, 184, 1)', // blue
+        'completed': 'rgba(40, 167, 69, 1)' // green
+    };
+
+    let datasets = [];
+    statuses.forEach(status => {
+        // For each technician, if 'all', sum across all techs; if filtered, just that tech
+        let data = allDates.map(date => {
+            let sum = 0;
+            techNames.forEach(tech => {
+                if (chartData[tech][date]) {
+                    sum += chartData[tech][date][status] || 0;
+                }
+            });
+            return sum;
+        });
+        datasets.push({
+            label: statusLabels[status],
+            data: data,
+            borderColor: statusColors[status],
+            backgroundColor: statusColors[status],
+            fill: false,
+            tension: 0.2
+        });
+    });
+
+    const ctx = document.getElementById('technicianChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: allDates,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    display: true
+                },
+                title: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Number of Work Orders'
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Date'
+                    }
+                }
+            }
+        }
+    });
+</script>
+
+{% endblock %}

@@ -197,3 +197,84 @@ $(document).ready(function() {
     // Initialize any additional plugins or features
     console.log('Work Order Management System initialized');
 }); 
+
+    // Technician Analytics Chart (Chart.js)
+    if ($('#technicianChart').length) {
+        const chartData = window.chartData || {};
+        const statuses = ['pending', 'on_going', 'completed'];
+        const colors = {
+            pending: 'rgba(255, 193, 7, 0.7)',
+            on_going: 'rgba(13, 202, 240, 0.7)',
+            completed: 'rgba(25, 135, 84, 0.7)'
+        };
+
+        const labelsSet = new Set();
+        const datasets = [];
+
+        // Collect all dates across technicians
+        Object.entries(chartData).forEach(([technician, dateMap]) => {
+            Object.keys(dateMap).forEach(date => labelsSet.add(date));
+        });
+
+        const sortedLabels = Array.from(labelsSet).sort();
+
+        statuses.forEach(status => {
+            Object.entries(chartData).forEach(([technician, dateMap]) => {
+                const data = sortedLabels.map(date => {
+                    return dateMap[date]?.[status] || 0;
+                });
+
+                datasets.push({
+                    label: `${technician} - ${status.replace('_', ' ').toUpperCase()}`,
+                    data: data,
+                    fill: false,
+                    borderColor: colors[status],
+                    backgroundColor: colors[status],
+                    tension: 0.3
+                });
+            });
+        });
+
+        const ctx = document.getElementById('technicianChart').getContext('2d');
+
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: sortedLabels,
+                datasets: datasets
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'bottom'
+                    },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false
+                    }
+                },
+                interaction: {
+                    mode: 'nearest',
+                    axis: 'x',
+                    intersect: false
+                },
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Date'
+                        }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Work Orders'
+                        }
+                    }
+                }
+            }
+        });
+    }
