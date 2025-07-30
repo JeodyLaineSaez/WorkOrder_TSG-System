@@ -1,0 +1,4 @@
+campus,office,type,item,serial_number,issue_description,category,status,remarks,date_requested,date_completed
+City Camp,COT,desktop_laptop,Computer And Network,K2501N01,No magenta color in printer,repair,pending,Urgent request,2024-01-15 09:30:00,
+City Camp,Library,printer,Epson L3210,,Setup of computer network,installation_setup,completed,Done,2024-01-14 14:20:00,2024-01-15 16:45:00
+City Camp,Registrar,lan_internet,Wifi Router,,No internet connection,repair,on_going,Under investigation,2024-01-16 08:00:00,

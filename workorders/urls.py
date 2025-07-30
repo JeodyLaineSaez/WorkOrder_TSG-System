@@ -26,10 +26,13 @@ urlpatterns = [
     path('manage-accomplishment-report/', views.manage_accomplishment_report_view, name='manage_accomplishment_report'),
     path('export-accomplishment-report/', views.export_accomplishment_report_view, name='export_accomplishment_report'),
     
+    # Import/Export functionality
+    path('import-work-orders-csv/', views.import_work_orders_csv_view, name='import_work_orders_csv'),
+    path('export-work-orders-csv/', views.export_work_orders_csv_view, name='export_work_orders_csv'),
+    
     # AJAX endpoints
     path('ajax/get-offices/', views.get_offices_by_campus, name='get_offices_by_campus'),
     path('edit-technician/<int:technician_id>/', views.edit_technician_view, name='edit_technician'),
     path('edit-user/<int:user_id>/', views.edit_user_view, name='edit_user'),
     path('edit-office/<int:office_id>/', views.edit_office_view, name='edit_office'),
-    path('export-work-orders-csv/', views.export_work_orders_csv_view, name='export_work_orders_csv'),
 ] 

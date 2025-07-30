@@ -422,7 +422,7 @@
         <div class="card bg-light">
             <div class="card-body">
                 <h6 class="card-title text-muted mb-3">
-                    <i class="bi bi-clock"></i> Average Handling Time
+                    <i class="bi bi-clock"></i> Average Handling Time (Request to Completion)
                 </h6>
                 <div class="table-responsive">
                     <table class="table table-hover table-striped">
@@ -707,6 +707,38 @@
     {% endif %}
 </script>
 
+{% endif %}
+
+<!-- Debug Information (only for TSG staff) -->
+{% if user.is_tsg_staff and debug_completed_work_orders_count %}
+<div class="row mt-3">
+    <div class="col-12">
+        <div class="card bg-light">
+            <div class="card-body">
+                <h6 class="card-title text-muted mb-3">
+                    <i class="bi bi-bug"></i> Debug Information
+                </h6>
+                <div class="row">
+                    <div class="col-md-6">
+                        <p><strong>Total Completed Work Orders:</strong> {{ debug_completed_work_orders_count }}</p>
+                    </div>
+                    <div class="col-md-6">
+                        <p><strong>Technicians with Completed Work Orders:</strong></p>
+                        {% if debug_technicians_with_completed %}
+                            <ul class="list-unstyled">
+                            {% for tech in debug_technicians_with_completed %}
+                                <li>{{ tech.name }}: {{ tech.completed_count }} completed, {{ tech.avg_time }} hours avg</li>
+                            {% endfor %}
+                            </ul>
+                        {% else %}
+                            <p class="text-muted">No technicians with completed work orders found.</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 {% endif %}
 
 {% endblock %}

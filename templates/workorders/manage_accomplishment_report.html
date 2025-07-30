@@ -1,107 +1,124 @@
 {% extends 'base.html' %}
 {% load crispy_forms_tags %}
 
-{% block title %}Manage Accomplishment Report - Work Order System{% endblock %}
+{% block title %}Reports & Data Management - Work Order System{% endblock %}
 
 {% block content %}
 <div class="container mt-4">
-    <h2 class="mb-4"><i class="bi bi-file-earmark-text"></i> Accomplishment Report</h2>
-    <form method="get" class="row g-3 mb-3">
-        <!-- CHANGE: Add date filter fields -->
+    <h2 class="mb-4"><i class="bi bi-file-earmark-text"></i> Reports & Data Management</h2>
+    
+    <!-- Accomplishment Report Section -->
+    <div class="card shadow mb-4">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0"><i class="bi bi-file-earmark-text"></i> Accomplishment Report</h5>
+        </div>
+        <div class="card-body">
+            <form method="get" class="row g-3 mb-4">
         <div class="col-md-4">
-            <label for="id_date_started" class="form-label">Date Started</label>
-            <input type="date" id="id_date_started" name="date_started" class="form-control" value="{{ request.GET.date_started }}">
+            {{ form.date_started|as_crispy_field }}
         </div>
         <div class="col-md-4">
-            <label for="id_date_ended" class="form-label">Date Ended</label>
-            <input type="date" id="id_date_ended" name="date_ended" class="form-control" value="{{ request.GET.date_ended }}">
+            {{ form.date_ended|as_crispy_field }}
         </div>
         <div class="col-md-4 align-self-end">
-            <button type="submit" class="btn btn-primary w-100">Filter</button>
+            <button type="submit" class="btn btn-primary w-100">
+                <i class="bi bi-search"></i> Filter
+            </button>
         </div>
     </form>
-
-    {# CHANGE: Only show results if filter is applied (date_started and date_ended are set) #}
-    {% if request.GET.date_started and request.GET.date_ended %}
-        {% if work_orders %}
-            <div class="alert alert-info">
-                <i class="bi bi-info-circle"></i> 
-                Work orders are displayed in order by work order number from oldest to newest.
-            </div>
-            <div class="table-responsive mb-4">
-                <table class="table table-bordered table-hover">
-                    <thead class="table-light">
-                        <tr>
-                            <th>Work Order ID</th>
-                            <th>Item</th>
-                            <th>Date & Time Requested</th>
-                            <th>Issue Description</th>
-                            <th>Status</th>
-                            <th>Remarks</th>
-                            <th>Date & Time Completed</th>
-                            <th>Assigned Technician</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for wo in work_orders %}
-                        <tr>
-                            <td>WO-{{ wo.id|stringformat:"06d" }}</td>
-                            <td>{{ wo.item }}</td>
-                                            <!-- Display date and time for date_requested -->
-                <td>{{ wo.date_requested|date:'M d, Y g:i A' }} (PHT)</td>
-                            <td>{{ wo.issue_description }}</td>
-                            <td>{{ wo.get_status_display }}</td>
-                            <td>{{ wo.remarks|default:'-' }}</td>
-                            <!-- Display date and time for date_completed -->
-                            <td>{{ wo.date_completed|date:'M d, Y g:i A' }} (PHT)</td>
-                            <td>{{ wo.assigned_technician.user.get_full_name }}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            <div class="text-center mb-4">
-                <!-- Export form here -->
-                <form method="get" action="{% url 'export_accomplishment_report' %}" target="_blank" class="row g-3 align-items-end justify-content-center">
-                    <input type="hidden" name="date_started" value="{{ request.GET.date_started }}">
-                    <input type="hidden" name="date_ended" value="{{ request.GET.date_ended }}">
-                    <div class="col-md-4">
-                        <label for="id_technician" class="form-label">Technician</label>
-                        <select id="id_technician" name="technician" class="form-control">
-                            {% if show_all %}
-                                <option value="">All Technicians</option>
-                            {% endif %}
-                            {% for tech in technicians %}
-                                <option value="{{ tech.id }}" {% if request.GET.technician == tech.id|stringformat:'s' %}selected{% endif %}>{{ tech.user.get_full_name }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="col-md-4 align-self-end">
-                        <button type="submit" class="btn btn-success btn-lg w-100">
-                            <i class="bi bi-download"></i> Export Report
-                        </button>
-                    </div>
-                </form>
-            </div>
-        {% else %}
-            <div class="alert alert-info text-center">No work order request was completed in this time period.</div>
-        {% endif %}
+    {% if work_orders %}
+    <div class="table-responsive mb-4">
+        <table class="table table-bordered table-hover">
+            <thead class="table-light">
+                <tr>
+                    <th>Work Order ID</th>
+                    <th>Item</th>
+                    <th>Date & Time Requested</th>
+                    <th>Issue Description</th>
+                    <th>Status</th>
+                    <th>Remarks</th>
+                    <th>Date & Time Completed</th>
+                    <th>Assigned Technician</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for wo in work_orders %}
+                <tr>
+                    <td>WO-{{ wo.id|stringformat:"06d" }}</td>
+                    <td>{{ wo.item }}</td>
+                    <td>{{ wo.date_requested|date:'M d, Y H:i' }}</td>
+                    <td>{{ wo.issue_description }}</td>
+                    <td>{{ wo.get_status_display }}</td>
+                    <td>{{ wo.remarks|default:'-' }}</td>
+                    <td>{{ wo.date_completed|date:'M d, Y H:i' }}</td>
+                    <td>{{ wo.assigned_technician.user.get_full_name }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="text-center mb-4">
+        <form method="get" action="{% url 'export_accomplishment_report' %}" target="_blank">
+            <input type="hidden" name="date_started" value="{{ form.date_started.value }}">
+            <input type="hidden" name="date_ended" value="{{ form.date_ended.value }}">
+            <button type="submit" class="btn btn-success btn-lg">
+                <i class="bi bi-download"></i> Export Report
+            </button>
+        </form>
+    </div>
+    {% elif form.is_bound %}
+    <div class="alert alert-info">No completed work orders found for the selected period.</div>
     {% endif %}
+    
+    
+            {% if user.is_tsg_staff %}
+            <a href="{% url 'export_work_orders_csv' %}" class="btn btn-outline-success">
+                <i class="bi bi-file-earmark-spreadsheet"></i> Export Work Orders (CSV)
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- Import/Export Section - TSG Staff Only -->
     {% if user.is_tsg_staff %}
-    <!-- CHANGE: Add separate date filter for CSV export -->
-    <form method="get" action="{% url 'export_work_orders_csv' %}" class="row g-3 mt-3 mb-4">
-        <div class="col-md-4">
-            <label for="csv_date_started" class="form-label">CSV Date Started</label>
-            <input type="date" id="csv_date_started" name="date_started" class="form-control" value="{{ request.GET.csv_date_started }}">
+    <hr class="my-5">
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0"><i class="bi bi-arrow-left-right"></i> Import/Export Work Orders</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="card border-primary">
+                                <div class="card-body text-center">
+                                    <i class="bi bi-file-earmark-arrow-up text-primary fs-1 mb-3"></i>
+                                    <h6 class="card-title">Import Work Orders</h6>
+                                    <p class="card-text">Upload a CSV file to import multiple work orders at once.</p>
+                                    <a href="{% url 'import_work_orders_csv' %}" class="btn btn-primary">
+                                        <i class="bi bi-upload"></i> Import CSV
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card border-success">
+                                <div class="card-body text-center">
+                                    <i class="bi bi-file-earmark-arrow-down text-success fs-1 mb-3"></i>
+                                    <h6 class="card-title">Export Work Orders</h6>
+                                    <p class="card-text">Download all work orders as a CSV file for backup or analysis.</p>
+                                    <a href="{% url 'export_work_orders_csv' %}" class="btn btn-success">
+                                        <i class="bi bi-download"></i> Export CSV
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
-        <div class="col-md-4">
-            <label for="csv_date_ended" class="form-label">CSV Date Ended</label>
-            <input type="date" id="csv_date_ended" name="date_ended" class="form-control" value="{{ request.GET.csv_date_ended }}">
-        </div>
-        <div class="col-md-4 align-self-end">
-            <button type="submit" class="btn btn-success w-100">Export CSV (by Date Requested)</button>
-        </div>
-    </form>
+    </div>
     {% endif %}
 </div>
 {% endblock %} 

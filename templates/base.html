@@ -57,6 +57,13 @@
                             <li><a class="dropdown-item" href="{% url 'manage_offices' %}">Manage Offices</a></li>
                             <li><a class="dropdown-item" href="{% url 'manage_technicians' %}">Manage Technicians</a></li>
                             <li><a class="dropdown-item" href="{% url 'manage_users' %}">Manage Users</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{% url 'import_work_orders_csv' %}">
+                                <i class="bi bi-file-earmark-arrow-up"></i> Import Work Orders
+                            </a></li>
+                            <li><a class="dropdown-item" href="{% url 'export_work_orders_csv' %}">
+                                <i class="bi bi-file-earmark-arrow-down"></i> Export Work Orders
+                            </a></li>
                         </ul>
                     </li>
                     {% endif %}

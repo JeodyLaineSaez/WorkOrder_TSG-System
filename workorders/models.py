@@ -65,19 +65,20 @@ class ComputerTechnician(models.Model):
         return f"{self.user.get_display_name()} - {self.specialization}"
     
     def get_average_handling_time_hours(self):
-        """Calculate average handling time in hours for completed work orders"""
+        """Calculate average handling time in hours for completed work orders from request to completion"""
         completed_work_orders = self.assigned_work_orders.filter(
             status='completed',
             date_completed__isnull=False,
-            date_assigned__isnull=False
+            date_requested__isnull=False
         )
         
         total_handling_time = 0
         count = 0
         
         for wo in completed_work_orders:
-            handling_time = wo.get_handling_time_hours()
-            if handling_time is not None:
+            # Calculate time from request to completion (not assignment to completion)
+            handling_time = wo.get_total_time_hours()
+            if handling_time is not None and handling_time >= 0:  # Ensure positive time
                 total_handling_time += handling_time
                 count += 1
         
@@ -88,6 +89,28 @@ class ComputerTechnician(models.Model):
     def get_completed_work_orders_count(self):
         """Get count of completed work orders"""
         return self.assigned_work_orders.filter(status='completed').count()
+    
+    def get_average_assignment_time_hours(self):
+        """Calculate average handling time in hours for completed work orders from assignment to completion"""
+        completed_work_orders = self.assigned_work_orders.filter(
+            status='completed',
+            date_completed__isnull=False,
+            date_assigned__isnull=False
+        )
+        
+        total_handling_time = 0
+        count = 0
+        
+        for wo in completed_work_orders:
+            # Calculate time from assignment to completion
+            handling_time = wo.get_handling_time_hours()
+            if handling_time is not None:
+                total_handling_time += handling_time
+                count += 1
+        
+        if count > 0:
+            return round(total_handling_time / count, 2)
+        return 0
 
 class WorkOrder(models.Model):
     """Work order request model"""
@@ -177,8 +200,22 @@ class WorkOrder(models.Model):
     def get_total_time_hours(self):
         """Calculate total time in hours from request to completion"""
         if self.date_completed and self.date_requested:
-            total_time = self.date_completed - self.date_requested
-            return round(total_time.total_seconds() / 3600, 2)
+            # Ensure dates are timezone-aware
+            if self.date_completed.tzinfo is None:
+                from django.utils import timezone
+                date_completed = timezone.make_aware(self.date_completed)
+            else:
+                date_completed = self.date_completed
+                
+            if self.date_requested.tzinfo is None:
+                from django.utils import timezone
+                date_requested = timezone.make_aware(self.date_requested)
+            else:
+                date_requested = self.date_requested
+            
+            total_time = date_completed - date_requested
+            hours = total_time.total_seconds() / 3600
+            return round(hours, 2) if hours >= 0 else 0
         return None
 
 

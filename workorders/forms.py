@@ -293,3 +293,26 @@ class ComputerTechnicianForm(forms.ModelForm):
             'specialization': forms.TextInput(attrs={'class': 'form-control'}),
             'is_available': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         } 
+
+class CSVImportForm(forms.Form):
+    """Form for importing work orders from CSV file"""
+    csv_file = forms.FileField(
+        label='CSV File',
+        help_text='Upload a CSV file with work order data. The file should have headers matching the work order fields.',
+        widget=forms.FileInput(attrs={
+            'class': 'form-control',
+            'accept': '.csv',
+            'required': True
+        })
+    )
+    
+    def clean_csv_file(self):
+        csv_file = self.cleaned_data.get('csv_file')
+        if csv_file:
+            if not csv_file.name.endswith('.csv'):
+                raise forms.ValidationError('Please upload a valid CSV file.')
+            if csv_file.size > 5 * 1024 * 1024:  # 5MB limit
+                raise forms.ValidationError('File size must be less than 5MB.')
+            if csv_file.size == 0:
+                raise forms.ValidationError('The uploaded file is empty.')
+        return csv_file 

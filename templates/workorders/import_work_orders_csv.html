@@ -1,0 +1,126 @@
+{% extends 'base.html' %}
+
+{% block title %}Import Work Orders from CSV{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-8 mx-auto">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="mb-0">
+                        <i class="fas fa-file-import me-2"></i>
+                        Import Work Orders from CSV
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <h6><i class="fas fa-info-circle me-2"></i>CSV Import Instructions</h6>
+                        <p class="mb-2">Please ensure your CSV file contains the following columns:</p>
+                        <ul class="mb-2">
+                            <li><strong>campus</strong> - Campus name (will be created if doesn't exist)</li>
+                            <li><strong>office</strong> - Office name (will be created if doesn't exist)</li>
+                            <li><strong>type</strong> - Work order type (desktop_laptop, printer, scanner, lan_internet, other)</li>
+                            <li><strong>item</strong> - Item description (required)</li>
+                            <li><strong>serial_number</strong> - Serial number (optional)</li>
+                            <li><strong>issue_description</strong> - Issue description (required)</li>
+                            <li><strong>requested_by</strong> - Requester name (optional, defaults to current user)</li>
+                            <li><strong>date_requested</strong> - Date requested (multiple formats supported)</li>
+                            <li><strong>assigned_technician</strong> - Technician name (optional)</li>
+                            <li><strong>category</strong> - Category (repair, maintenance, checkup, etc.)</li>
+                            <li><strong>remarks</strong> - Remarks (optional)</li>
+                            <li><strong>date_completed</strong> - Date completed (multiple formats supported, optional)</li>
+                            <li><strong>status</strong> - Status (pending, on_going, completed)</li>
+                        </ul>
+                        <p class="mb-0"><strong>Note:</strong> Campuses and offices will be automatically created if they don't exist. Users and technicians will be automatically created if they don't exist. <strong>Duplicate prevention</strong> ensures only one entry per unique name. Empty fields will be preserved as empty.</p>
+                        
+                        <div class="mt-3">
+                            <h6><i class="fas fa-calendar-alt me-2"></i>Date Format Support</h6>
+                            <p class="mb-2">The system supports various date formats:</p>
+                            <ul class="small mb-0">
+                                <li><strong>Standard:</strong> 2024-01-15 09:30:00, 2024-01-15 09:30, 2024-01-15</li>
+                                <li><strong>US Format:</strong> 01/15/2024 09:30:00, 01/15/2024 09:30, 01/15/2024</li>
+                                <li><strong>European Format:</strong> 15/01/2024 09:30:00, 15/01/2024 09:30, 15/01/2024</li>
+                                <li><strong>Text Format:</strong> January 15, 2024 09:30:00, January 15, 2024</li>
+                                <li><strong>AM/PM Format:</strong> July 21, 2025 at 08:00 AM, July 21, 2025 at 03:20 PM</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="mt-3">
+                            <h6><i class="fas fa-shield-alt me-2"></i>Duplicate Prevention</h6>
+                            <p class="mb-2">The system prevents duplicate entries:</p>
+                            <ul class="small mb-0">
+                                <li><strong>Users:</strong> Exact name matching prevents multiple users with same name</li>
+                                <li><strong>Technicians:</strong> Exact name matching prevents multiple technicians with same name</li>
+                                <li><strong>Campus/Office:</strong> Exact name matching prevents duplicate locations</li>
+                                <li><strong>Case Insensitive:</strong> "John Doe" and "john doe" are treated as the same person</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <form method="post" enctype="multipart/form-data">
+                        {% csrf_token %}
+                        
+                        <div class="mb-3">
+                            <label for="{{ form.csv_file.id_for_label }}" class="form-label">
+                                {{ form.csv_file.label }}
+                            </label>
+                            {{ form.csv_file }}
+                            {% if form.csv_file.help_text %}
+                                <div class="form-text">{{ form.csv_file.help_text }}</div>
+                            {% endif %}
+                            {% if form.csv_file.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.csv_file.errors %}
+                                        {{ error }}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <a href="{% url 'dashboard' %}" class="btn btn-secondary me-md-2">
+                                <i class="fas fa-arrow-left me-1"></i>Back to Dashboard
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-upload me-1"></i>Import CSV
+                            </button>
+                        </div>
+                    </form>
+
+                    <hr class="my-4">
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="card bg-light">
+                                <div class="card-body">
+                                    <h6 class="card-title">
+                                        <i class="fas fa-download me-2"></i>Download Template
+                                    </h6>
+                                    <p class="card-text">Download a sample CSV template to see the required format.</p>
+                                    <a href="{% url 'export_work_orders_csv' %}?template=true" class="btn btn-outline-primary btn-sm">
+                                        <i class="fas fa-download me-1"></i>Download Template
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card bg-light">
+                                <div class="card-body">
+                                    <h6 class="card-title">
+                                        <i class="fas fa-question-circle me-2"></i>Need Help?
+                                    </h6>
+                                    <p class="card-text">View existing work orders to understand the data structure.</p>
+                                    <a href="{% url 'dashboard' %}" class="btn btn-outline-info btn-sm">
+                                        <i class="fas fa-eye me-1"></i>View Work Orders
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

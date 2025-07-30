@@ -11,7 +11,7 @@ from .models import User, WorkOrder, Campus, Office, ComputerTechnician, WorkOrd
 from .forms import (
     CustomUserCreationForm, CustomAuthenticationForm, WorkOrderForm,
     WorkOrderAssignmentForm, WorkOrderUpdateForm, CampusForm, OfficeForm,
-    ComputerTechnicianForm, WorkOrderUserUpdateForm
+    ComputerTechnicianForm, WorkOrderUserUpdateForm, CSVImportForm
 )
 from docxtpl import DocxTemplate
 import os
@@ -21,6 +21,8 @@ import csv
 from django.utils.encoding import smart_str
 from datetime import timedelta
 import pytz
+from io import StringIO
+from django.db import transaction
 
 def format_philippine_time(datetime_obj):
     """Format datetime object to Philippine time with AM/PM"""
@@ -239,6 +241,22 @@ def dashboard_view(request):
     # Debug information
     context["debug_technician_id"] = technician_id
     context["debug_technician_name"] = selected_technician_name
+    
+    # Debug: Check if there are completed work orders
+    completed_work_orders_count = WorkOrder.objects.filter(status='completed').count()
+    context["debug_completed_work_orders_count"] = completed_work_orders_count
+    
+    # Debug: Check technicians with completed work orders
+    technicians_with_completed = []
+    for tech in all_technicians:
+        completed_count = tech.get_completed_work_orders_count()
+        if completed_count > 0:
+            technicians_with_completed.append({
+                'name': tech.user.get_display_name(),
+                'completed_count': completed_count,
+                'avg_time': tech.get_average_handling_time_hours()
+            })
+    context["debug_technicians_with_completed"] = technicians_with_completed
     
     return render(request, 'workorders/dashboard.html', context)
 
@@ -500,12 +518,17 @@ def manage_users_view(request):
 @login_required
 @user_passes_test(is_tsg_staff)
 def manage_accomplishment_report_view(request):
-    """Manage accomplishment report with date filter (no AccomplishmentReportForm)"""
+    """Manage accomplishment report with date filter"""
     from .models import WorkOrder, ComputerTechnician
+    
+    # Create form instance with GET data
+    form = AccomplishmentReportForm(request.GET or None)
+    
     work_orders = WorkOrder.objects.filter(status='completed')
     date_started = request.GET.get('date_started')
     date_ended = request.GET.get('date_ended')
     technician_id = request.GET.get('technician')
+    
     if date_started and date_ended:
         work_orders = work_orders.filter(date_requested__range=[date_started, date_ended])
     if technician_id:
@@ -526,7 +549,9 @@ def manage_accomplishment_report_view(request):
     else:
         technicians = []
         show_all = False
+    
     return render(request, 'workorders/manage_accomplishment_report.html', {
+        'form': form,
         'work_orders': work_orders,
         'technicians': technicians,
         'show_all': show_all,
@@ -681,7 +706,48 @@ def edit_office_view(request, office_id):
 @login_required
 def export_work_orders_csv_view(request):
     """Export all work orders (pending, on_going, completed) as CSV, filtered by date_requested if date_started and date_ended are provided"""
-    # --- CHANGE: Filter by date_requested if date_started and date_ended are provided ---
+    # Check if this is a template request
+    template_request = request.GET.get('template', 'false').lower() == 'true'
+    
+    if template_request:
+        # Return a template CSV with sample data
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename=work_orders_template.csv'
+        writer = csv.writer(response)
+        writer.writerow([
+            'campus', 'office', 'type', 'item', 'serial_number', 'issue_description', 
+            'requested_by', 'date_requested', 'assigned_technician', 'category', 'remarks', 
+            'date_completed', 'status'
+        ])
+        # Add sample rows with various date formats and empty fields
+        writer.writerow([
+            'City Camp', 'COT', 'desktop_laptop', 'Computer And Network', 'K2501N01', 
+            'No magenta color in printer', 'John Doe', 'July 21, 2025 at 08:00 AM', 'Alvin', 
+            'repair', 'Urgent request', '', 'pending'
+        ])
+        writer.writerow([
+            'City Camp', 'Library', 'printer', 'Epson L3210', '', 
+            'Setup of computer network', 'Jane Smith', 'July 21, 2025 at 08:00 AM', 'Adrian Na', 
+            'installation_setup', 'Done', 'July 21, 2025 at 03:20 PM', 'completed'
+        ])
+        writer.writerow([
+            'City Camp', 'Registrar', 'lan_internet', 'Wifi Router', '', 
+            'No internet connection', 'Bob Johnson', 'July 21, 2025 at 08:00 AM', 'Daniel V. I', 
+            'repair', 'Under investigation', 'July 21, 2025 at 03:22 PM', 'completed'
+        ])
+        writer.writerow([
+            'City Camp', 'CAO', 'desktop_laptop', 'MSI Thin 1 K2501N01', 'K2501N01', 
+            'Excel not visible', 'Ryan R. Es', 'July 22, 2025 at 08:00 AM', 'Jhun Jhun', 
+            'maintenance', 'Software issue', 'July 22, 2025 at 03:24 PM', 'completed'
+        ])
+        writer.writerow([
+            'City Camp', 'Legal', 'printer', 'HP LaserJet', '', 
+            'Paper jam issue', 'Ellen Jane', 'July 23, 2025 at 09:00 AM', '', 
+            'repair', '', '', 'pending'
+        ])
+        return response
+    
+    # Regular export functionality
     work_orders = WorkOrder.objects.filter(status__in=['pending', 'on_going', 'completed']).order_by('id')
     date_started = request.GET.get('date_started')
     date_ended = request.GET.get('date_ended')
@@ -713,3 +779,349 @@ def export_work_orders_csv_view(request):
             smart_str(wo.get_status_display() if hasattr(wo, 'get_status_display') else wo.status),
         ])
     return response
+
+@login_required
+@user_passes_test(is_tsg_staff)
+def import_work_orders_csv_view(request):
+    """Import work orders from a CSV file."""
+    if request.method == 'POST':
+        form = CSVImportForm(request.POST, request.FILES)
+        if form.is_valid():
+            csv_file = request.FILES['csv_file']
+            if not csv_file.name.endswith('.csv'):
+                messages.error(request, 'Please upload a CSV file.')
+                return redirect('import_work_orders_csv')
+
+            try:
+                data = StringIO(csv_file.read().decode('utf-8'))
+                reader = csv.DictReader(data)
+                
+                imported_count = 0
+                updated_count = 0
+                error_count = 0
+
+                with transaction.atomic():
+                    for row_num, row in enumerate(reader, start=2):  # Start from 2 since row 1 is header
+                        try:
+                            # Basic validation for required fields
+                            if not row.get('campus') or not row.get('office') or not row.get('item') or not row.get('issue_description'):
+                                messages.warning(request, f'Row {row_num}: Missing required fields (campus, office, item, or issue_description)')
+                                error_count += 1
+                                continue
+
+                            # Get or create campus (prevent duplicates)
+                            campus_name = row['campus'].strip()
+                            campus, created = Campus.objects.get_or_create(name=campus_name)
+                            if created:
+                                messages.info(request, f'Row {row_num}: Created new campus "{campus_name}".')
+                            
+                            # Get or create office (prevent duplicates)
+                            office_name = row['office'].strip()
+                            office, created = Office.objects.get_or_create(
+                                name=office_name,
+                                campus=campus
+                            )
+                            if created:
+                                messages.info(request, f'Row {row_num}: Created new office "{office_name}" in campus "{campus_name}".')
+
+                            # Map type field
+                            type_mapping = {
+                                'desktop_laptop': 'desktop_laptop',
+                                'printer': 'printer',
+                                'scanner': 'scanner',
+                                'lan_internet': 'lan_internet',
+                                'other': 'other',
+                                'Desktop/Laptop Computer': 'desktop_laptop',
+                                'Printer': 'printer',
+                                'Scanner': 'scanner',
+                                'LAN/Internet': 'lan_internet',
+                                'Others': 'other'
+                            }
+                            work_type = type_mapping.get(row.get('type', '').strip(), 'desktop_laptop')
+
+                            # Map category field
+                            category_mapping = {
+                                'repair': 'repair',
+                                'maintenance': 'maintenance',
+                                'checkup': 'checkup',
+                                'cleaning': 'cleaning',
+                                'data_backup_recovery': 'data_backup_recovery',
+                                'installation_setup': 'installation_setup',
+                                'reformatting_reinstallation': 'reformatting_reinstallation',
+                                'replacement': 'replacement',
+                                'relocation_reassignment': 'relocation_reassignment',
+                                'update_upgrade_software': 'update_upgrade_software',
+                                'Repair': 'repair',
+                                'Maintenance': 'maintenance',
+                                'Checkup': 'checkup',
+                                'Cleaning': 'cleaning',
+                                'Data Backup and Recovery': 'data_backup_recovery',
+                                'Installation and Setup': 'installation_setup',
+                                'Reformatting and Reinstallation': 'reformatting_reinstallation',
+                                'Replacement': 'replacement',
+                                'Relocation/Reassignment': 'relocation_reassignment',
+                                'Update/Upgrade Software': 'update_upgrade_software'
+                            }
+                            work_category = category_mapping.get(row.get('category', '').strip(), 'repair')
+
+                            # Map status field
+                            status_mapping = {
+                                'pending': 'pending',
+                                'on_going': 'on_going',
+                                'completed': 'completed',
+                                'Pending': 'pending',
+                                'On Going': 'on_going',
+                                'Completed': 'completed'
+                            }
+                            work_status = status_mapping.get(row.get('status', '').strip(), 'pending')
+
+                            # Parse date_requested - retain actual date from CSV
+                            date_requested = None
+                            if row.get('date_requested'):
+                                date_str = row['date_requested'].strip()
+                                if date_str:  # Only process if not empty
+                                    try:
+                                        # Try different date formats
+                                        date_formats = [
+                                            '%Y-%m-%d %H:%M:%S',  # 2024-01-15 09:30:00
+                                            '%Y-%m-%d %H:%M',     # 2024-01-15 09:30
+                                            '%Y-%m-%d',           # 2024-01-15
+                                            '%m/%d/%Y %H:%M:%S',  # 01/15/2024 09:30:00
+                                            '%m/%d/%Y %H:%M',     # 01/15/2024 09:30
+                                            '%m/%d/%Y',           # 01/15/2024
+                                            '%d/%m/%Y %H:%M:%S',  # 15/01/2024 09:30:00
+                                            '%d/%m/%Y %H:%M',     # 15/01/2024 09:30
+                                            '%d/%m/%Y',           # 15/01/2024
+                                            '%B %d, %Y %H:%M:%S', # January 15, 2024 09:30:00
+                                            '%B %d, %Y %H:%M',    # January 15, 2024 09:30
+                                            '%B %d, %Y',          # January 15, 2024
+                                            '%B %d, %Y at %I:%M %p',  # July 21, 2025 at 08:00 AM
+                                            '%B %d, %Y at %H:%M',     # July 21, 2025 at 08:00
+                                        ]
+                                        
+                                        parsed_date = None
+                                        for fmt in date_formats:
+                                            try:
+                                                parsed_date = timezone.datetime.strptime(date_str, fmt)
+                                                break
+                                            except ValueError:
+                                                continue
+                                        
+                                        if parsed_date:
+                                            # Make timezone-aware
+                                            if parsed_date.tzinfo is None:
+                                                date_requested = timezone.make_aware(parsed_date)
+                                            else:
+                                                date_requested = parsed_date
+                                        else:
+                                            messages.warning(request, f'Row {row_num}: Could not parse date_requested "{date_str}". Using current time.')
+                                            date_requested = timezone.now()
+                                    except Exception as e:
+                                        messages.warning(request, f'Row {row_num}: Error parsing date_requested "{date_str}": {str(e)}. Using current time.')
+                                        date_requested = timezone.now()
+                                else:
+                                    # Empty date field - use current time
+                                    date_requested = timezone.now()
+                            else:
+                                # No date field - use current time
+                                date_requested = timezone.now()
+
+                            # Parse date_completed - retain actual date from CSV
+                            date_completed = None
+                            if row.get('date_completed'):
+                                date_str = row['date_completed'].strip()
+                                if date_str:  # Only process if not empty
+                                    try:
+                                        # Try different date formats
+                                        date_formats = [
+                                            '%Y-%m-%d %H:%M:%S',  # 2024-01-15 09:30:00
+                                            '%Y-%m-%d %H:%M',     # 2024-01-15 09:30
+                                            '%Y-%m-%d',           # 2024-01-15
+                                            '%m/%d/%Y %H:%M:%S',  # 01/15/2024 09:30:00
+                                            '%m/%d/%Y %H:%M',     # 01/15/2024 09:30
+                                            '%m/%d/%Y',           # 01/15/2024
+                                            '%d/%m/%Y %H:%M:%S',  # 15/01/2024 09:30:00
+                                            '%d/%m/%Y %H:%M',     # 15/01/2024 09:30
+                                            '%d/%m/%Y',           # 15/01/2024
+                                            '%B %d, %Y %H:%M:%S', # January 15, 2024 09:30:00
+                                            '%B %d, %Y %H:%M',    # January 15, 2024 09:30
+                                            '%B %d, %Y',          # January 15, 2024
+                                            '%B %d, %Y at %I:%M %p',  # July 21, 2025 at 08:00 AM
+                                            '%B %d, %Y at %H:%M',     # July 21, 2025 at 08:00
+                                        ]
+                                        
+                                        parsed_date = None
+                                        for fmt in date_formats:
+                                            try:
+                                                parsed_date = timezone.datetime.strptime(date_str, fmt)
+                                                break
+                                            except ValueError:
+                                                continue
+                                        
+                                        if parsed_date:
+                                            # Make timezone-aware
+                                            if parsed_date.tzinfo is None:
+                                                date_completed = timezone.make_aware(parsed_date)
+                                            else:
+                                                date_completed = parsed_date
+                                        else:
+                                            messages.warning(request, f'Row {row_num}: Could not parse date_completed "{date_str}". Setting to None.')
+                                    except Exception as e:
+                                        messages.warning(request, f'Row {row_num}: Error parsing date_completed "{date_str}": {str(e)}. Setting to None.')
+                                # If empty or None, leave as None (don't set any default)
+
+                            # Handle requested_by field - create user if doesn't exist (prevent duplicates)
+                            requested_by = request.user  # Default to current user
+                            if row.get('requested_by'):
+                                requester_name = row['requested_by'].strip()
+                                if requester_name:
+                                    try:
+                                        # Try to find existing user by username, email, or full name (case-insensitive)
+                                        requested_by_user = User.objects.filter(
+                                            Q(username__iexact=requester_name) |
+                                            Q(email__iexact=requester_name) |
+                                            Q(first_name__iexact=requester_name) |
+                                            Q(last_name__iexact=requester_name) |
+                                            Q(first_name__iexact=requester_name.split()[0]) & Q(last_name__iexact=' '.join(requester_name.split()[1:])) if len(requester_name.split()) > 1 else Q(first_name__iexact=requester_name)
+                                        ).first()
+                                        
+                                        if requested_by_user:
+                                            requested_by = requested_by_user
+                                        else:
+                                            # Create new user if not found
+                                            # Split name into first and last name
+                                            name_parts = requester_name.split()
+                                            if len(name_parts) >= 2:
+                                                first_name = name_parts[0]
+                                                last_name = ' '.join(name_parts[1:])
+                                            else:
+                                                first_name = requester_name
+                                                last_name = ''
+                                            
+                                            # Create username from name
+                                            username = requester_name.lower().replace(' ', '_')
+                                            # Ensure username is unique
+                                            counter = 1
+                                            original_username = username
+                                            while User.objects.filter(username=username).exists():
+                                                username = f"{original_username}_{counter}"
+                                                counter += 1
+                                            
+                                            # Create new user
+                                            requested_by_user = User.objects.create(
+                                                username=username,
+                                                first_name=first_name,
+                                                last_name=last_name,
+                                                email=f"{username}@example.com",  # Placeholder email
+                                                user_type='standard_user'
+                                            )
+                                            requested_by = requested_by_user
+                                            messages.info(request, f'Row {row_num}: Created new user "{requester_name}" for requested_by field.')
+                                    except Exception as e:
+                                        messages.warning(request, f'Row {row_num}: Error creating user "{requester_name}": {str(e)}. Using current user.')
+
+                            # Handle assigned_technician field - create technician if doesn't exist (prevent duplicates)
+                            assigned_technician = None
+                            if row.get('assigned_technician'):
+                                technician_name = row['assigned_technician'].strip()
+                                if technician_name:
+                                    try:
+                                        # Try to find existing technician by username, email, or full name (case-insensitive)
+                                        technician_user = User.objects.filter(
+                                            Q(username__iexact=technician_name) |
+                                            Q(email__iexact=technician_name) |
+                                            Q(first_name__iexact=technician_name) |
+                                            Q(last_name__iexact=technician_name) |
+                                            Q(first_name__iexact=technician_name.split()[0]) & Q(last_name__iexact=' '.join(technician_name.split()[1:])) if len(technician_name.split()) > 1 else Q(first_name__iexact=technician_name)
+                                        ).first()
+                                        
+                                        if technician_user:
+                                            assigned_technician = ComputerTechnician.objects.filter(user=technician_user).first()
+                                            if not assigned_technician:
+                                                # Create technician profile if user exists but no technician profile
+                                                assigned_technician = ComputerTechnician.objects.create(
+                                                    user=technician_user,
+                                                    specialization='General IT Support',
+                                                    is_available=True
+                                                )
+                                                messages.info(request, f'Row {row_num}: Created technician profile for existing user "{technician_name}".')
+                                        else:
+                                            # Create new user and technician if not found
+                                            # Split name into first and last name
+                                            name_parts = technician_name.split()
+                                            if len(name_parts) >= 2:
+                                                first_name = name_parts[0]
+                                                last_name = ' '.join(name_parts[1:])
+                                            else:
+                                                first_name = technician_name
+                                                last_name = ''
+                                            
+                                            # Create username from name
+                                            username = technician_name.lower().replace(' ', '_')
+                                            # Ensure username is unique
+                                            counter = 1
+                                            original_username = username
+                                            while User.objects.filter(username=username).exists():
+                                                username = f"{original_username}_{counter}"
+                                                counter += 1
+                                            
+                                            # Create new user
+                                            technician_user = User.objects.create(
+                                                username=username,
+                                                first_name=first_name,
+                                                last_name=last_name,
+                                                email=f"{username}@example.com",  # Placeholder email
+                                                user_type='TSG_staff'
+                                            )
+                                            
+                                            # Create technician profile
+                                            assigned_technician = ComputerTechnician.objects.create(
+                                                user=technician_user,
+                                                specialization='General IT Support',
+                                                is_available=True
+                                            )
+                                            messages.info(request, f'Row {row_num}: Created new technician "{technician_name}" for assigned_technician field.')
+                                    except Exception as e:
+                                        messages.warning(request, f'Row {row_num}: Error creating technician "{technician_name}": {str(e)}. Setting to None.')
+
+                            # Create work order - handle empty fields properly
+                            work_order = WorkOrder.objects.create(
+                                campus=campus,
+                                office=office,
+                                type=work_type,
+                                item=row['item'].strip(),
+                                serial_number=row.get('serial_number', '').strip() or None,  # Empty string becomes None
+                                issue_description=row['issue_description'].strip(),
+                                category=work_category,
+                                status=work_status,
+                                remarks=row.get('remarks', '').strip() or '',  # Empty string stays empty string
+                                date_requested=date_requested,
+                                date_completed=date_completed,  # Can be None for empty fields
+                                requested_by=requested_by,
+                                assigned_technician=assigned_technician,  # Can be None for empty fields
+                            )
+                            
+                            imported_count += 1
+
+                        except Exception as e:
+                            messages.warning(request, f'Row {row_num}: Error processing row - {str(e)}')
+                            error_count += 1
+                            continue
+
+                # Show summary
+                if imported_count > 0:
+                    messages.success(request, f'Successfully imported {imported_count} work order(s)!')
+                if error_count > 0:
+                    messages.warning(request, f'{error_count} row(s) had errors and were skipped.')
+                
+                return redirect('dashboard')
+                
+            except Exception as e:
+                messages.error(request, f'Error reading CSV file: {str(e)}')
+                return redirect('import_work_orders_csv')
+        else:
+            messages.error(request, 'Please select a valid CSV file to import.')
+            return redirect('import_work_orders_csv')
+    else:
+        form = CSVImportForm()
+    return render(request, 'workorders/import_work_orders_csv.html', {'form': form})
