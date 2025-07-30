@@ -19,9 +19,9 @@
                 <li class="list-group-item"><strong>Serial Number:</strong> {{ work_order.serial_number|default:'-' }}</li>
                 <li class="list-group-item"><strong>Description:</strong> {{ work_order.issue_description }}</li>
                 <li class="list-group-item"><strong>Requested By:</strong> {{ work_order.requested_by.get_full_name }}</li>
-                <li class="list-group-item"><strong>Date Requested:</strong> {{ work_order.date_requested|date:'M d, Y' }}</li>
+                <li class="list-group-item"><strong>Date Requested:</strong> {{ work_order.date_requested|date:'M d, Y g:i A' }} (PHT)</li>
                 <li class="list-group-item"><strong>Assigned Technician:</strong> {% if work_order.assigned_technician %}{{ work_order.assigned_technician.user.get_full_name }}{% else %}-{% endif %}</li>
-                <li class="list-group-item"><strong>Date Completed:</strong> {{ work_order.date_completed|date:'M d, Y' }}</li>
+                <li class="list-group-item"><strong>Date Completed:</strong> {{ work_order.date_completed|date:'M d, Y g:i A' }} (PHT)</li>
                 <li class="list-group-item"><strong>Remarks:</strong> {{ work_order.remarks|default:'-' }}</li>
             </ul>
             <a href="{% url 'dashboard' %}" class="btn btn-secondary mt-3">

@@ -11,6 +11,56 @@
     </a>
 </div>
 
+<!-- Pending Work Orders Alert for TSG Staff Only -->
+{# This alert only shows for TSG staff users when there are pending work orders #}
+{% if user.is_tsg_staff and pending_work_orders > 0 %}
+    <div class="alert alert-warning alert-dismissible fade show" role="alert">
+        <div class="d-flex align-items-center">
+            <i class="bi bi-exclamation-triangle-fill me-2 fs-4"></i>
+            <div class="flex-grow-1">
+                <strong>Attention TSG Staff!</strong>
+                <br>
+                There are <strong>{{ pending_work_orders }}</strong> work order(s) that are not yet accepted and are pending in the work order queue.
+                {% if pending_work_orders <= 5 %}
+                    <br><small class="text-muted">Please review and assign technicians to these pending work orders.</small>
+                {% else %}
+                    <br><small class="text-muted">Please prioritize and assign technicians to these pending work orders as soon as possible.</small>
+                {% endif %}
+                
+                <!-- Show first few pending work orders -->
+                {% if pending_work_orders_list %}
+                    <div class="mt-2">
+                        <small class="text-muted"><strong>Recent pending work orders:</strong></small>
+                        <ul class="list-unstyled mt-1 mb-0">
+                            {% for wo in pending_work_orders_list|slice:":3" %}
+                                <li class="small">
+                                    <i class="bi bi-clock me-1"></i>
+                                    WO-{{ wo.id|stringformat:"06d" }} - {{ wo.item }} 
+                                    <span class="text-muted">({{ wo.date_requested|date:'M d, Y g:i A' }})</span>
+                                </li>
+                            {% endfor %}
+                            {% if pending_work_orders > 3 %}
+                                <li class="small text-muted">
+                                    <i class="bi bi-three-dots me-1"></i>
+                                    And {{ pending_work_orders|add:"-3" }} more pending work order(s)...
+                                </li>
+                            {% endif %}
+                        </ul>
+                    </div>
+                {% endif %}
+                
+                <!-- Quick action button -->
+                <div class="mt-2">
+                    <a href="{% url 'dashboard' %}?status=pending" class="btn btn-sm btn-outline-warning">
+                        <i class="bi bi-eye me-1"></i> View All Pending Work Orders
+                    </a>
+                </div>
+            </div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+{% endif %}
+
 <!-- Statistics Cards -->
 <div class="row mb-4">
     <div class="col-md-3">
@@ -132,7 +182,7 @@
                         <td>{{ work_order.get_type_display }}</td>
                         <td>{{ work_order.item }}</td>
                         <td>{{ work_order.requested_by.get_full_name }}</td>
-                        <td>{{ work_order.date_requested|date:"M d, Y" }}</td>
+                        <td>{{ work_order.date_requested|date:"M d, Y g:i A" }} (PHT)</td>
                         <td>
                             {% if work_order.status == 'pending' %}
                                 <span class="badge bg-warning">Pending</span>
@@ -227,11 +277,75 @@
     </div>
 </div>
 
-<!-- Analytics Section -->
+<!-- Analytics Section - TSG Staff Only -->
+{% if user.is_tsg_staff %}
 <hr class="my-5">
 
+<!-- Work Order Distribution Summary -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card bg-light">
+            <div class="card-body text-center">
+                <h6 class="card-title text-muted">Total Categories</h6>
+                <h3 class="text-primary" id="totalCategories">0</h3>
+                <small class="text-muted">with active work orders</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card bg-light">
+            <div class="card-body text-center">
+                <h6 class="card-title text-muted">Active Offices</h6>
+                <h3 class="text-success" id="totalOffices">0</h3>
+                <small class="text-muted">with work order requests</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Work Order Distribution Charts -->
+<div class="row mb-5">
+    <div class="col-md-6">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="bi bi-pie-chart"></i> Work Orders by Category</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="categoryChart" height="300"></canvas>
+                <div class="mt-3">
+                    <small class="text-muted">
+                        <i class="bi bi-info-circle"></i> 
+                        Shows distribution of work orders across different categories for the selected period.
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card shadow">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0"><i class="bi bi-bar-chart"></i> Work Orders by Office</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="officeChart" height="300"></canvas>
+                <div class="mt-3">
+                    <small class="text-muted">
+                        <i class="bi bi-info-circle"></i> 
+                        Identifies high-demand offices and request sources for the selected period.
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="d-flex justify-content-between align-items-center mb-3">
-    <h5><i class="bi bi-graph-up"></i> Technician Work Order Analytics</h5>
+    <div>
+        <h5><i class="bi bi-graph-up"></i> Technician Work Order Analytics</h5>
+        {% if selected_technician_name %}
+            <p class="text-muted mb-0">Showing data for: <strong>{{ selected_technician_name }}</strong></p>
+        {% endif %}
+    </div>
     <form method="get" class="d-flex align-items-center gap-2">
         <label for="period" class="me-2">View by:</label>
         <select name="period" id="period" onchange="this.form.submit()" class="form-select d-inline-block w-auto">
@@ -243,32 +357,235 @@
         <select name="technician" id="technician" onchange="this.form.submit()" class="form-select d-inline-block w-auto">
             <option value="all" {% if selected_technician == "all" %}selected{% endif %}>All Technicians</option>
             {% for tech in all_technicians %}
-                <option value="{{ tech.id }}" {% if selected_technician|add:'0' == tech.id|stringformat:'d' %}selected{% endif %}>{{ tech.user.get_full_name }}</option>
+                <option value="{{ tech.id }}" {% if selected_technician == tech.id|stringformat:'s' %}selected{% endif %}>{{ tech.user.get_full_name }}</option>
             {% endfor %}
         </select>
+        <!-- Preserve other GET parameters -->
+        {% for key, value in request.GET.items %}
+            {% if key != 'period' and key != 'technician' %}
+                <input type="hidden" name="{{ key }}" value="{{ value }}">
+            {% endif %}
+        {% endfor %}
     </form>
 </div>
 
-<canvas id="technicianChart" height="120"></canvas>
+<div class="card shadow">
+    <div class="card-body">
+        <canvas id="technicianChart" height="120"></canvas>
+    </div>
+</div>
+
+<!-- Analytics Summary -->
+<div class="row mt-4">
+    <div class="col-md-3">
+        <div class="card bg-light">
+            <div class="card-body text-center">
+                <h6 class="card-title text-muted">Total Work Orders</h6>
+                <h3 class="text-primary" id="totalWorkOrders">0</h3>
+                <small class="text-muted">in selected period</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-light">
+            <div class="card-body text-center">
+                <h6 class="card-title text-muted">Completed</h6>
+                <h3 class="text-success" id="completedWorkOrders">0</h3>
+                <small class="text-muted">successfully finished</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-light">
+            <div class="card-body text-center">
+                <h6 class="card-title text-muted">Pending</h6>
+                <h3 class="text-warning" id="pendingWorkOrders">0</h3>
+                <small class="text-muted">awaiting completion</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-light">
+            <div class="card-body text-center">
+                <h6 class="card-title text-muted">Avg Handling Time</h6>
+                <h3 class="text-info" id="avgHandlingTime">0</h3>
+                <small class="text-muted">hours per work order</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Average Handling Time Details -->
+{% if avg_handling_times %}
+<div class="row mt-3">
+    <div class="col-12">
+        <div class="card bg-light">
+            <div class="card-body">
+                <h6 class="card-title text-muted mb-3">
+                    <i class="bi bi-clock"></i> Average Handling Time
+                </h6>
+                <div class="table-responsive">
+                    <table class="table table-hover table-striped">
+                        <thead class="table-primary">
+                            <tr>
+                                <th scope="col" class="fw-bold">Name</th>
+                                <th scope="col" class="text-end fw-bold">Hours</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for tech_name, avg_time in avg_handling_times.items %}
+                            <tr>
+                                <td class="fw-medium align-middle">{{ tech_name }}</td>
+                                <td class="text-end align-middle">
+                                    {% if avg_time > 0 %}
+                                        <span class="badge bg-info fs-6">{{ avg_time }} hours</span>
+                                    {% else %}
+                                        <span class="text-muted fst-italic">No completed work orders</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
+    {% if user.is_tsg_staff %}
+    // Category Pie Chart
+    const categoryData = {{ category_data|safe }};
+    const categoryLabels = Object.keys(categoryData);
+    const categoryValues = Object.values(categoryData);
+    
+    // Generate colors for pie chart
+    const categoryColors = [
+        'rgba(255, 99, 132, 0.8)',
+        'rgba(54, 162, 235, 0.8)',
+        'rgba(255, 206, 86, 0.8)',
+        'rgba(75, 192, 192, 0.8)',
+        'rgba(153, 102, 255, 0.8)',
+        'rgba(255, 159, 64, 0.8)',
+        'rgba(199, 199, 199, 0.8)',
+        'rgba(83, 102, 255, 0.8)',
+        'rgba(255, 99, 132, 0.8)',
+        'rgba(54, 162, 235, 0.8)'
+    ];
+
+    if (categoryLabels.length > 0) {
+        const categoryCtx = document.getElementById('categoryChart').getContext('2d');
+        new Chart(categoryCtx, {
+            type: 'pie',
+            data: {
+                labels: categoryLabels,
+                datasets: [{
+                    data: categoryValues,
+                    backgroundColor: categoryColors.slice(0, categoryLabels.length),
+                    borderWidth: 2,
+                    borderColor: '#fff'
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            padding: 20,
+                            usePointStyle: true
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.label || '';
+                                const value = context.parsed;
+                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                const percentage = ((value / total) * 100).toFixed(1);
+                                return `${label}: ${value} (${percentage}%)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    } else {
+        document.getElementById('categoryChart').parentElement.innerHTML = 
+            '<div class="text-center py-5"><p class="text-muted">No category data available</p></div>';
+    }
+
+    // Office Bar Chart
+    const officeData = {{ office_data|safe }};
+    const officeLabels = Object.keys(officeData);
+    const officeValues = Object.values(officeData);
+
+    if (officeLabels.length > 0) {
+        const officeCtx = document.getElementById('officeChart').getContext('2d');
+        new Chart(officeCtx, {
+            type: 'bar',
+            data: {
+                labels: officeLabels,
+                datasets: [{
+                    label: 'Work Orders',
+                    data: officeValues,
+                    backgroundColor: 'rgba(40, 167, 69, 0.8)',
+                    borderColor: 'rgba(40, 167, 69, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return `Work Orders: ${context.parsed.y}`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Number of Work Orders'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Office'
+                        }
+                    }
+                }
+            }
+        });
+    } else {
+        document.getElementById('officeChart').parentElement.innerHTML = 
+            '<div class="text-center py-5"><p class="text-muted">No office data available</p></div>';
+    }
+
+    // Update summary statistics
+    document.getElementById('totalCategories').textContent = categoryLabels.length;
+    document.getElementById('totalOffices').textContent = officeLabels.length;
+
+    // Technician Analytics Chart (existing code)
     // Prepare chart data from Django context
     const chartData = {{ chart_data|safe }};
+    const allDates = {{ all_dates|safe }};
     const period = '{{ period }}';
     const selectedTechnician = '{{ selected_technician }}';
+    const selectedTechnicianName = '{{ selected_technician_name }}';
 
-    // Get all dates in the period
-    function getAllDates(chartData) {
-        const dateSet = new Set();
-        Object.values(chartData).forEach(techData => {
-            Object.keys(techData).forEach(date => dateSet.add(date));
-        });
-        return Array.from(dateSet).sort();
-    }
-    const allDates = getAllDates(chartData);
-
-    // Get technician names (should be only one if filtered, or all if 'all')
+    // Get technician names
     const techNames = Object.keys(chartData);
 
     // Prepare datasets for each status
@@ -290,7 +607,7 @@
         let data = allDates.map(date => {
             let sum = 0;
             techNames.forEach(tech => {
-                if (chartData[tech][date]) {
+                if (chartData[tech] && chartData[tech][date]) {
                     sum += chartData[tech][date][status] || 0;
                 }
             });
@@ -306,11 +623,23 @@
         });
     });
 
+    // Format dates for display
+    const formattedDates = allDates.map(dateStr => {
+        const date = new Date(dateStr);
+        if (period === 'week') {
+            return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+        } else if (period === 'month') {
+            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        } else {
+            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        }
+    });
+
     const ctx = document.getElementById('technicianChart').getContext('2d');
     new Chart(ctx, {
         type: 'line',
         data: {
-            labels: allDates,
+            labels: formattedDates,
             datasets: datasets
         },
         options: {
@@ -320,7 +649,8 @@
                     display: true
                 },
                 title: {
-                    display: false
+                    display: true,
+                    text: `Work Order Analytics - ${selectedTechnicianName} (${period.charAt(0).toUpperCase() + period.slice(1)})`
                 }
             },
             scales: {
@@ -340,6 +670,43 @@
             }
         }
     });
+
+    // Update summary cards
+    let totalWorkOrders = 0;
+    let completedWorkOrders = 0;
+    let pendingWorkOrders = 0;
+
+    techNames.forEach(tech => {
+        allDates.forEach(date => {
+            if (chartData[tech] && chartData[tech][date]) {
+                totalWorkOrders += (chartData[tech][date].pending || 0) + (chartData[tech][date].on_going || 0) + (chartData[tech][date].completed || 0);
+                completedWorkOrders += chartData[tech][date].completed || 0;
+                pendingWorkOrders += (chartData[tech][date].pending || 0) + (chartData[tech][date].on_going || 0);
+            }
+        });
+    });
+
+    document.getElementById('totalWorkOrders').textContent = totalWorkOrders;
+    document.getElementById('completedWorkOrders').textContent = completedWorkOrders;
+    document.getElementById('pendingWorkOrders').textContent = pendingWorkOrders;
+
+    // Calculate and display average handling time
+    const avgHandlingTimes = {{ avg_handling_times|safe }};
+    let totalAvgTime = 0;
+    let techCount = 0;
+    
+    Object.values(avgHandlingTimes).forEach(time => {
+        if (time > 0) {
+            totalAvgTime += time;
+            techCount += 1;
+        }
+    });
+    
+    const overallAvgTime = techCount > 0 ? (totalAvgTime / techCount).toFixed(2) : 0;
+    document.getElementById('avgHandlingTime').textContent = overallAvgTime;
+    {% endif %}
 </script>
+
+{% endif %}
 
 {% endblock %}

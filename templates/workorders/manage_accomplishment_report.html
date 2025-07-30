@@ -24,6 +24,10 @@
     {# CHANGE: Only show results if filter is applied (date_started and date_ended are set) #}
     {% if request.GET.date_started and request.GET.date_ended %}
         {% if work_orders %}
+            <div class="alert alert-info">
+                <i class="bi bi-info-circle"></i> 
+                Work orders are displayed in order by work order number from oldest to newest.
+            </div>
             <div class="table-responsive mb-4">
                 <table class="table table-bordered table-hover">
                     <thead class="table-light">
@@ -43,13 +47,13 @@
                         <tr>
                             <td>WO-{{ wo.id|stringformat:"06d" }}</td>
                             <td>{{ wo.item }}</td>
-                            <!-- CHANGE: Only use date format, not time, for date_requested -->
-                            <td>{{ wo.date_requested|date:'M d, Y' }}</td>
+                                            <!-- Display date and time for date_requested -->
+                <td>{{ wo.date_requested|date:'M d, Y g:i A' }} (PHT)</td>
                             <td>{{ wo.issue_description }}</td>
                             <td>{{ wo.get_status_display }}</td>
                             <td>{{ wo.remarks|default:'-' }}</td>
-                            <!-- CHANGE: Only use date format, not time, for date_completed -->
-                            <td>{{ wo.date_completed|date:'M d, Y' }}</td>
+                            <!-- Display date and time for date_completed -->
+                            <td>{{ wo.date_completed|date:'M d, Y g:i A' }} (PHT)</td>
                             <td>{{ wo.assigned_technician.user.get_full_name }}</td>
                         </tr>
                         {% endfor %}

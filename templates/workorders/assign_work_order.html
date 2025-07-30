@@ -21,7 +21,7 @@
                     <li class="list-group-item"><strong>Category:</strong> {{ work_order.category }}</li>
                     <li class="list-group-item"><strong>Description:</strong> {{ work_order.issue_description }}</li>
                     <li class="list-group-item"><strong>Requested By:</strong> {{ work_order.requested_by.get_full_name }}</li>
-                    <li class="list-group-item"><strong>Date Requested:</strong> {{ work_order.date_requested|date:'M d, Y' }}</li>
+                    <li class="list-group-item"><strong>Date Requested:</strong> {{ work_order.date_requested|date:'M d, Y g:i A' }} (PHT)</li>
                 </ul>
                 <form method="post" {% if work_order.assigned_technician %}class="disabled" onsubmit="return false;"{% endif %}>
                     {% csrf_token %}

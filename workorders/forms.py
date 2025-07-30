@@ -122,38 +122,75 @@ class WorkOrderUpdateForm(forms.ModelForm):
     """Form for updating work order status and details"""
     remarks = forms.CharField(
         widget=forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
-        required=True
+        required=True,
+        help_text="Remarks are required for work order updates."
     )
-    date_requested = forms.DateField(
-        widget=forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
-        required=False
+    date_requested = forms.DateTimeField(
+        widget=forms.DateTimeInput(attrs={'class': 'form-control', 'type': 'datetime-local'}),
+        required=False,
+        help_text="Optional: You can update the date requested. Cannot be set to a date before today. Original dates are preserved if not changed."
     )
     requested_by_name = forms.CharField(
         label='Requested By (Name)',
         required=False,
-        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Edit requested by name', 'readonly': 'readonly'})
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Edit requested by name'}),
+        help_text="Optional: You can update the requested by name."
     )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.instance and self.instance.pk:
             self.fields['requested_by_name'].initial = self.instance.requested_by.get_full_name() if self.instance.requested_by else ''
-            # Make requested_by_name readonly for TSG staff
-            self.fields['requested_by_name'].widget.attrs['readonly'] = True
             # Set initial value for date_requested
             self.fields['date_requested'].initial = self.instance.date_requested
+            # Make status required
+            self.fields['status'].required = True
 
     def clean_date_requested(self):
         date_requested = self.cleaned_data.get('date_requested')
-        if self.instance and self.instance.pk:
-            original_date = self.instance.date_requested
-            # If the date is not changed, allow it (even if in the past)
-            if date_requested == original_date:
-                return date_requested
-            # If changed, do not allow setting to a date before the original date
-            if date_requested and date_requested < original_date:
-                raise forms.ValidationError('Date requested cannot be set before the original request date (%s).' % original_date.strftime('%B %d, %Y'))
+        if date_requested:
+            from django.utils import timezone
+            from datetime import datetime, time
+            
+            # Get today's date at midnight for comparison
+            today = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            
+            # Only validate if the date is being changed (not the original date)
+            if self.instance and self.instance.pk:
+                original_date = self.instance.date_requested
+                # If the date is not changed, allow it (even if in the past)
+                if date_requested == original_date:
+                    return date_requested
+                # If changed, do not allow setting to a date before today
+                if date_requested.date() < today.date():
+                    raise forms.ValidationError('Date requested cannot be set to a date before today.')
+            else:
+                # For new instances, do not allow setting to a date before today
+                if date_requested.date() < today.date():
+                    raise forms.ValidationError('Date requested cannot be set to a date before today.')
+        
         return date_requested
+
+    def clean(self):
+        cleaned_data = super().clean()
+        status = cleaned_data.get('status')
+        remarks = cleaned_data.get('remarks')
+        
+        # Ensure status and remarks are provided
+        if not status:
+            self.add_error('status', 'Status is required.')
+        if not remarks or not remarks.strip():
+            self.add_error('remarks', 'Remarks are required for work order updates.')
+        
+        # Validate requested_by_name if provided
+        requested_by_name = cleaned_data.get('requested_by_name', '').strip()
+        if requested_by_name:
+            # Check if the name has at least two parts (first and last name)
+            name_parts = requested_by_name.split()
+            if len(name_parts) < 2:
+                self.add_error('requested_by_name', 'Please provide both first and last name.')
+        
+        return cleaned_data
 
     class Meta:
         model = WorkOrder

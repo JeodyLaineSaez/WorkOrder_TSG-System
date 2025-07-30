@@ -23,6 +23,13 @@ class User(AbstractUser):
     
     def is_standard_user(self):
         return self.user_type == 'standard_user'
+    
+    def get_display_name(self):
+        """Get the full name for display purposes"""
+        full_name = self.get_full_name()
+        if full_name.strip():
+            return full_name
+        return self.username
 
 class Campus(models.Model):
     """Campus locations"""
@@ -55,7 +62,32 @@ class ComputerTechnician(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     
     def __str__(self):
-        return f"{self.user.get_full_name()} - {self.specialization}"
+        return f"{self.user.get_display_name()} - {self.specialization}"
+    
+    def get_average_handling_time_hours(self):
+        """Calculate average handling time in hours for completed work orders"""
+        completed_work_orders = self.assigned_work_orders.filter(
+            status='completed',
+            date_completed__isnull=False,
+            date_assigned__isnull=False
+        )
+        
+        total_handling_time = 0
+        count = 0
+        
+        for wo in completed_work_orders:
+            handling_time = wo.get_handling_time_hours()
+            if handling_time is not None:
+                total_handling_time += handling_time
+                count += 1
+        
+        if count > 0:
+            return round(total_handling_time / count, 2)
+        return 0
+    
+    def get_completed_work_orders_count(self):
+        """Get count of completed work orders"""
+        return self.assigned_work_orders.filter(status='completed').count()
 
 class WorkOrder(models.Model):
     """Work order request model"""
@@ -98,7 +130,7 @@ class WorkOrder(models.Model):
     
     # Request metadata
     requested_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='requested_work_orders')
-    date_requested = models.DateField(default=timezone.now)
+    date_requested = models.DateTimeField(default=timezone.now)
     
     # Assignment details (TSG Staff only)
     assigned_technician = models.ForeignKey(ComputerTechnician, on_delete=models.SET_NULL, 
@@ -125,15 +157,29 @@ class WorkOrder(models.Model):
         return f"WO-{self.id:06d} - {self.item} ({self.status})"
     
     def save(self, *args, **kwargs):
-        # Auto-update date_assigned when technician is assigned
+        # Auto-update date_assigned when technician is assigned (Philippine time)
         if self.assigned_technician and not self.date_assigned:
             self.date_assigned = timezone.now()
         
-        # Auto-update date_completed when status changes to completed
+        # Auto-update date_completed when status changes to completed (Philippine time)
         if self.status == 'completed' and not self.date_completed:
             self.date_completed = timezone.now()
         
         super().save(*args, **kwargs)
+    
+    def get_handling_time_hours(self):
+        """Calculate handling time in hours from assignment to completion"""
+        if self.date_completed and self.date_assigned:
+            handling_time = self.date_completed - self.date_assigned
+            return round(handling_time.total_seconds() / 3600, 2)
+        return None
+    
+    def get_total_time_hours(self):
+        """Calculate total time in hours from request to completion"""
+        if self.date_completed and self.date_requested:
+            total_time = self.date_completed - self.date_requested
+            return round(total_time.total_seconds() / 3600, 2)
+        return None
 
 
 class WorkOrderHistory(models.Model):
