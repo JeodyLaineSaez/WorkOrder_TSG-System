@@ -39,7 +39,11 @@
                             <div class="col-md-6">
                                 {{ form.requested_by_name|as_crispy_field }}
                             </div>
+                            <div class="col-md-6">
+                                {{ form.serial_number|as_crispy_field }}
+                            </div>
                         </div>
+                        {{ form.issue_description|as_crispy_field }}
                         {{ form.remarks|as_crispy_field }}
                     {% else %}
                         {{ form|crispy }}

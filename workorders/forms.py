@@ -122,19 +122,25 @@ class WorkOrderUpdateForm(forms.ModelForm):
     """Form for updating work order status and details"""
     remarks = forms.CharField(
         widget=forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
-        required=True,
-        help_text="Remarks are required for work order updates."
+        required=True
     )
     date_requested = forms.DateTimeField(
         widget=forms.DateTimeInput(attrs={'class': 'form-control', 'type': 'datetime-local'}),
         required=False,
-        help_text="Optional: You can update the date requested. Cannot be set to a date before today. Original dates are preserved if not changed."
+        help_text="Optional: Cannot be set to a date before today. Original dates are preserved if not changed."
     )
     requested_by_name = forms.CharField(
         label='Requested By (Name)',
         required=False,
-        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Edit requested by name'}),
-        help_text="Optional: You can update the requested by name."
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Edit requested by name'})
+    )
+    issue_description = forms.CharField(
+        widget=forms.Textarea(attrs={'class': 'form-control', 'rows': 4, 'placeholder': 'Please describe the issue in detail...'}),
+        required=False
+    )
+    serial_number = forms.CharField(
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Serial Number (optional)'}),
+        required=False
     )
 
     def __init__(self, *args, **kwargs):
@@ -194,7 +200,7 @@ class WorkOrderUpdateForm(forms.ModelForm):
 
     class Meta:
         model = WorkOrder
-        fields = ['status', 'remarks', 'date_requested']
+        fields = ['status', 'remarks', 'date_requested', 'issue_description', 'serial_number']
         widgets = {
             'status': forms.Select(attrs={'class': 'form-control'}),
         }

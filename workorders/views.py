@@ -91,7 +91,18 @@ def dashboard_view(request):
     total_work_orders = WorkOrder.objects.count()
     completed_work_orders = WorkOrder.objects.filter(status='completed').count()
     pending_work_orders = WorkOrder.objects.filter(status='pending').count()
-    available_technicians = ComputerTechnician.objects.filter(is_available=True).count()
+        
+    # Calculate real-time available technicians (exclude those with ongoing work orders)
+    all_technicians_for_availability = ComputerTechnician.objects.filter(is_available=True)
+    available_technicians = 0
+    busy_technicians = 0
+    
+    for tech in all_technicians_for_availability:
+        # Check if technician has any ongoing work orders
+        if tech.is_currently_available():
+            available_technicians += 1
+        else:
+            busy_technicians += 1
 
     # Show all work orders to all users, but exclude completed unless specifically filtered
     work_orders = WorkOrder.objects.all()
@@ -109,11 +120,33 @@ def dashboard_view(request):
     # Get pending work orders for alert notification
     pending_work_orders_list = WorkOrder.objects.filter(status='pending').order_by('date_requested')
     
+    # Get list of currently available technicians for detailed display
+    currently_available_technicians = []
+    busy_technicians_list = []
+    
+    for tech in all_technicians_for_availability:
+        if tech.is_currently_available():
+            currently_available_technicians.append({
+                'name': tech.user.get_display_name(),
+                'specialization': tech.specialization,
+                'completed_count': tech.get_completed_work_orders_count()
+            })
+        else:
+            ongoing_count = tech.get_ongoing_work_orders_count()
+            busy_technicians_list.append({
+                'name': tech.user.get_display_name(),
+                'specialization': tech.specialization,
+                'ongoing_count': ongoing_count
+            })
+    
     context = {
         'total_work_orders': total_work_orders,
         'completed_work_orders': completed_work_orders,
         'pending_work_orders': pending_work_orders,
         'available_technicians': available_technicians,
+        'busy_technicians': busy_technicians,
+        'currently_available_technicians': currently_available_technicians,
+        'busy_technicians_list': busy_technicians_list,
         'page_obj': page_obj,
         'status_filter': status_filter,
         'pending_work_orders_list': pending_work_orders_list,
@@ -166,6 +199,15 @@ def dashboard_view(request):
         all_dates.append(current_date.strftime('%Y-%m-%d'))
         current_date += timedelta(days=1)
 
+    # Get all unique dates from work orders to ensure we include them
+    work_order_dates = set()
+    for wo in work_orders:
+        work_order_dates.add(wo.date_requested.strftime('%Y-%m-%d'))
+    
+    # Combine period dates with work order dates
+    all_dates = list(set(all_dates + list(work_order_dates)))
+    all_dates.sort()  # Sort dates chronologically
+
     # Initialize chart data with all dates and zero values
     chart_data = {}
     if technician_id == "all":
@@ -191,29 +233,73 @@ def dashboard_view(request):
             else:
                 tech_name = "Unassigned"
             
-            # Add to chart data
+            # Add to chart data with defensive programming
             if technician_id == "all":
-                if tech_name in chart_data:
+                if tech_name in chart_data and date_str in chart_data[tech_name]:
                     chart_data[tech_name][date_str][status] += 1
             else:
-                if selected_technician_name in chart_data:
+                if selected_technician_name in chart_data and date_str in chart_data[selected_technician_name]:
                     chart_data[selected_technician_name][date_str][status] += 1
 
     # Calculate average handling time per technician
     avg_handling_times = {}
+    technician_work_orders = {}
     
     if technician_id == "all":
         # Calculate for all technicians
         for tech in all_technicians:
             tech_name = tech.user.get_display_name()
             avg_handling_times[tech_name] = tech.get_average_handling_time_hours()
+                        
+            # Get detailed completed work orders for this technician
+            completed_orders = tech.assigned_work_orders.filter(
+                status='completed',
+                date_completed__isnull=False,
+                date_assigned__isnull=False
+            ).order_by('-date_completed')
+            
+            technician_work_orders[tech_name] = []
+            for wo in completed_orders:
+                handling_time = wo.get_handling_time_hours()
+                if handling_time is not None:
+                    technician_work_orders[tech_name].append({
+                        'work_order_id': wo.id,
+                        'item': wo.item,
+                        'date_requested': wo.date_requested,
+                        'date_assigned': wo.date_assigned,
+                        'date_completed': wo.date_completed,
+                        'handling_time_hours': handling_time,
+                        'total_time_hours': wo.get_total_time_hours()
+                    })
     else:
         # Calculate for specific technician
         try:
             selected_tech = all_technicians.get(id=int(technician_id))
             avg_handling_times[selected_technician_name] = selected_tech.get_average_handling_time_hours()
+            
+            # Get detailed completed work orders for this technician
+            completed_orders = selected_tech.assigned_work_orders.filter(
+                status='completed',
+                date_completed__isnull=False,
+                date_assigned__isnull=False
+            ).order_by('-date_completed')
+            
+            technician_work_orders[selected_technician_name] = []
+            for wo in completed_orders:
+                handling_time = wo.get_handling_time_hours()
+                if handling_time is not None:
+                    technician_work_orders[selected_technician_name].append({
+                        'work_order_id': wo.id,
+                        'item': wo.item,
+                        'date_requested': wo.date_requested,
+                        'date_assigned': wo.date_assigned,
+                        'date_completed': wo.date_completed,
+                        'handling_time_hours': handling_time,
+                        'total_time_hours': wo.get_total_time_hours()
+                    })
         except (ValueError, ComputerTechnician.DoesNotExist):
             avg_handling_times = {}
+            technician_work_orders = {}
 
     # Calculate work order distribution by category
     category_data = {}
@@ -233,6 +319,7 @@ def dashboard_view(request):
     context["period"] = period
     context["all_dates"] = all_dates
     context["avg_handling_times"] = avg_handling_times
+    context["technician_work_orders"] = technician_work_orders
     context["category_data"] = category_data
     context["office_data"] = office_data
     
@@ -327,6 +414,18 @@ def update_work_order_view(request, work_order_id):
                 if 'date_requested' in form.cleaned_data and form.cleaned_data['date_requested']:
                     work_order.date_requested = form.cleaned_data['date_requested']
                 
+                # Update issue_description if provided
+                if 'issue_description' in form.cleaned_data:
+                    issue_description = form.cleaned_data['issue_description'].strip()
+                    if issue_description:
+                        work_order.issue_description = issue_description
+                
+                # Update serial_number if provided
+                if 'serial_number' in form.cleaned_data:
+                    serial_number = form.cleaned_data['serial_number'].strip()
+                    if serial_number:
+                        work_order.serial_number = serial_number
+                
                 # Update requested_by if requested_by_name is changed
                 if 'requested_by_name' in form.cleaned_data:
                     requested_by_name = form.cleaned_data['requested_by_name'].strip()
@@ -402,16 +501,30 @@ def update_work_order_view(request, work_order_id):
                         new_value=new_disp,
                     )
             # --- END: Compare and record changes ---
-            
+                        
             work_order.save()
-            # If status changed to completed, set technician available
-            if work_order.assigned_technician and prev_status != 'completed' and work_order.status == 'completed':
-                work_order.assigned_technician.is_available = True
-                work_order.assigned_technician.save()
-            # If status changed to on_going, set technician unavailable
-            if work_order.assigned_technician and prev_status != 'on_going' and work_order.status == 'on_going':
-                work_order.assigned_technician.is_available = False
-                work_order.assigned_technician.save()
+            
+            # Handle technician availability based on work order status changes
+            if work_order.assigned_technician:
+                if prev_status != 'completed' and work_order.status == 'completed':
+                    # When work order is completed, check if technician has other ongoing work orders
+                    # If no other ongoing work orders, they become available
+                    other_ongoing = work_order.assigned_technician.assigned_work_orders.filter(
+                        status='on_going'
+                    ).exclude(id=work_order.id).count()
+                    
+                    if other_ongoing == 0:
+                        work_order.assigned_technician.is_available = True
+                        work_order.assigned_technician.save()
+                        messages.info(request, f'Technician {work_order.assigned_technician.user.get_display_name()} is now available.')
+                    else:
+                        messages.info(request, f'Technician {work_order.assigned_technician.user.get_display_name()} still has {other_ongoing} ongoing work order(s).')
+                
+                elif prev_status != 'on_going' and work_order.status == 'on_going':
+                    # When work order becomes ongoing, technician becomes busy
+                    work_order.assigned_technician.is_available = False
+                    work_order.assigned_technician.save()
+                    messages.info(request, f'Technician {work_order.assigned_technician.user.get_display_name()} is now busy with ongoing work.')
             messages.success(request, 'Work order updated successfully!')
             return redirect('dashboard')
     else:
@@ -475,6 +588,18 @@ def manage_offices_view(request):
 def manage_technicians_view(request):
     """Manage computer technicians"""
     technicians = ComputerTechnician.objects.select_related('user').all()
+       
+    # Add real-time availability status for each technician
+    technicians_with_status = []
+    for tech in technicians:
+        availability_status = tech.get_availability_status()
+        technicians_with_status.append({
+            'technician': tech,
+            'availability_status': availability_status,
+            'ongoing_count': tech.get_ongoing_work_orders_count(),
+            'completed_count': tech.get_completed_work_orders_count(),
+            'total_assigned': tech.assigned_work_orders.count()
+        })
     
     if request.method == 'POST':
         form = ComputerTechnicianForm(request.POST)
@@ -486,7 +611,7 @@ def manage_technicians_view(request):
         form = ComputerTechnicianForm()
     
     return render(request, 'workorders/manage_technicians.html', {
-        'technicians': technicians,
+        'technicians_with_status': technicians_with_status,
         'form': form
     })
 
@@ -502,17 +627,19 @@ def manage_users_view(request):
 def manage_accomplishment_report_view(request):
     """Manage accomplishment report with date filter (no AccomplishmentReportForm)"""
     from .models import WorkOrder, ComputerTechnician
-    work_orders = WorkOrder.objects.filter(status='completed')
+    # Filter only completed work orders that have a completion date
+    work_orders = WorkOrder.objects.filter(status='completed', date_completed__isnull=False)
     date_started = request.GET.get('date_started')
     date_ended = request.GET.get('date_ended')
     technician_id = request.GET.get('technician')
     if date_started and date_ended:
-        work_orders = work_orders.filter(date_requested__range=[date_started, date_ended])
+        # Filter by date_completed instead of date_requested
+        work_orders = work_orders.filter(date_completed__date__range=[date_started, date_ended])
     if technician_id:
         work_orders = work_orders.filter(assigned_technician_id=technician_id)
     
-    # Order by work order number (ID) from past to current date completed
-    work_orders = work_orders.order_by('id')
+    # Order by date_completed from past to current datetime
+    work_orders = work_orders.order_by('date_completed')
     
     # --- CHANGE: Only show current user's ComputerTechnician and 'All Technicians' if TSG staff ---
     if request.user.is_tsg_staff():
@@ -544,13 +671,14 @@ def export_accomplishment_report_view(request):
     technician_id = request.GET.get('technician')
     work_orders = WorkOrder.objects.filter(
         status='completed',
+        date_completed__isnull=False,
         date_completed__date__gte=date_started,
         date_completed__date__lte=date_ended
     )
     if technician_id:
         work_orders = work_orders.filter(assigned_technician_id=technician_id)
-    # Order by work order number (ID) from past to current date completed
-    work_orders = work_orders.order_by('id')
+    # Order by date completed from past to current datetime
+    work_orders = work_orders.order_by('date_completed')
     
     table = []
     for wo in work_orders:
@@ -640,15 +768,41 @@ def export_work_order_view(request, work_order_id):
 @user_passes_test(is_tsg_staff)
 def edit_technician_view(request, technician_id):
     technician = get_object_or_404(ComputerTechnician, id=technician_id)
+       
+    # Get real-time availability status
+    availability_status = technician.get_availability_status()
+    ongoing_count = technician.get_ongoing_work_orders_count()
+    completed_count = technician.get_completed_work_orders_count()
+    total_assigned = technician.assigned_work_orders.count()
+    
     if request.method == 'POST':
         form = ComputerTechnicianForm(request.POST, instance=technician)
         if form.is_valid():
+            # Check if availability was changed
+            old_availability = technician.is_available
             form.save()
-            messages.success(request, 'Technician updated successfully!')
+            new_availability = form.instance.is_available
+            
+            if old_availability != new_availability:
+                if new_availability:
+                    messages.success(request, 'Technician marked as available!')
+                else:
+                    messages.warning(request, 'Technician marked as unavailable!')
+            else:
+                messages.success(request, 'Technician updated successfully!')
             return redirect('manage_technicians')
     else:
         form = ComputerTechnicianForm(instance=technician)
-    return render(request, 'workorders/edit_technician.html', {'form': form, 'technician': technician})
+    
+    context = {
+        'form': form, 
+        'technician': technician,
+        'availability_status': availability_status,
+        'ongoing_count': ongoing_count,
+        'completed_count': completed_count,
+        'total_assigned': total_assigned
+    }
+    return render(request, 'workorders/edit_technician.html', context)
 
 @login_required
 @user_passes_test(is_tsg_staff)
@@ -687,6 +841,13 @@ def export_work_orders_csv_view(request):
     date_ended = request.GET.get('date_ended')
     if date_started and date_ended:
         work_orders = work_orders.filter(date_requested__range=[date_started, date_ended])
+        
+    # Order by date completed from past to current datetime, with completed work orders first
+    # For work orders without date_completed, order by date_requested
+    work_orders = work_orders.order_by(
+        'date_completed',  # Completed work orders ordered by completion date
+        'date_requested'   # Non-completed work orders ordered by request date
+    )
     
     response = HttpResponse(content_type='text/csv')
     response['Content-Disposition'] = 'attachment; filename=work_orders.csv'

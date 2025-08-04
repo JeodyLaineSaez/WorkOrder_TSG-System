@@ -88,6 +88,43 @@ class ComputerTechnician(models.Model):
     def get_completed_work_orders_count(self):
         """Get count of completed work orders"""
         return self.assigned_work_orders.filter(status='completed').count()
+    
+    def get_ongoing_work_orders_count(self):
+        """Get count of ongoing work orders"""
+        return self.assigned_work_orders.filter(status='on_going').count()
+    
+    def is_currently_available(self):
+        """Check if technician is currently available (no ongoing work orders and is_available=True)"""
+        if not self.is_available:
+            return False
+        return self.get_ongoing_work_orders_count() == 0
+    
+    def get_current_work_orders(self):
+        """Get all current work orders (pending and ongoing)"""
+        return self.assigned_work_orders.filter(status__in=['pending', 'on_going'])
+    
+    def get_availability_status(self):
+        """Get detailed availability status"""
+        if not self.is_available:
+            return {
+                'status': 'unavailable',
+                'reason': 'Manually set to unavailable',
+                'ongoing_count': 0
+            }
+        
+        ongoing_count = self.get_ongoing_work_orders_count()
+        if ongoing_count > 0:
+            return {
+                'status': 'busy',
+                'reason': f'Has {ongoing_count} ongoing work order(s)',
+                'ongoing_count': ongoing_count
+            }
+        else:
+            return {
+                'status': 'available',
+                'reason': 'No ongoing work orders',
+                'ongoing_count': 0
+            }
 
 class WorkOrder(models.Model):
     """Work order request model"""
