@@ -89,6 +89,8 @@
     {% endif %}
     {% if user.is_tsg_staff %}
     <!-- CHANGE: Add separate date filter for CSV export -->
+    <hr class="my-5">     
+    <h2 class="mb-4"><i class="bi bi-clipboard-data fs-1"></i> Work Order Request Records</h2>
     <form method="get" action="{% url 'export_work_orders_csv' %}" class="row g-3 mt-3 mb-4">
         <div class="col-md-4">
             <label for="csv_date_started" class="form-label">CSV Date Started</label>
@@ -99,7 +101,7 @@
             <input type="date" id="csv_date_ended" name="date_ended" class="form-control" value="{{ request.GET.csv_date_ended }}">
         </div>
         <div class="col-md-4 align-self-end">
-            <button type="submit" class="btn btn-success w-100">Export CSV (by Date Requested)</button>
+            <button type="submit" class="btn btn-success w-100"><i class="bi bi-download"></i> Export CSV</button>
         </div>
     </form>
     {% endif %}
