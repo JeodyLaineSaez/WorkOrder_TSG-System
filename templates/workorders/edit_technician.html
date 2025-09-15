@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+{% block title %}Edit Technician{% endblock %}
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="bi bi-pencil"></i> Edit Technician</h5>
+                </div>
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+                        {{ form|crispy }}
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-success">
+                                <i class="bi bi-check-circle"></i> Save Changes
+                            </button>
+                            <a href="{% url 'manage_technicians' %}" class="btn btn-secondary">
+                                <i class="bi bi-arrow-left"></i> Cancel
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header bg-info text-white">
+                    <h6 class="mb-0"><i class="bi bi-info-circle"></i> Current Status</h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <strong>Technician:</strong> {{ technician.user.get_full_name }}
+                    </div>
+                    
+                    <div class="mb-3">
+                        <strong>Real-Time Status:</strong><br>
+                        {% if availability_status.status == 'available' %}
+                            <span class="badge bg-success" data-bs-toggle="tooltip" title="{{ availability_status.reason }}">
+                                <i class="bi bi-check-circle"></i> Available
+                            </span>
+                        {% elif availability_status.status == 'busy' %}
+                            <span class="badge bg-warning text-dark" data-bs-toggle="tooltip" title="{{ availability_status.reason }}">
+                                <i class="bi bi-clock"></i> Busy ({{ ongoing_count }} ongoing)
+                            </span>
+                        {% else %}
+                            <span class="badge bg-secondary" data-bs-toggle="tooltip" title="{{ availability_status.reason }}">
+                                <i class="bi bi-x-circle"></i> Unavailable
+                            </span>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="mb-3">
+                        <strong>Work Order Statistics:</strong><br>
+                        <small class="text-muted">
+                            <span class="badge bg-info">{{ total_assigned }} total assigned</span><br>
+                            <span class="badge bg-success">{{ completed_count }} completed</span><br>
+                            {% if ongoing_count > 0 %}
+                                <span class="badge bg-warning text-dark">{{ ongoing_count }} ongoing</span>
+                            {% endif %}
+                        </small>
+                    </div>
+                    
+                    {% if ongoing_count > 0 %}
+                    <div class="alert alert-warning">
+                        <small>
+                            <i class="bi bi-exclamation-triangle"></i>
+                            <strong>Note:</strong> This technician has {{ ongoing_count }} ongoing work order(s). 
+                            They will appear as "Busy" until all work orders are completed.
+                        </small>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Initialize tooltips
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl)
+    })
+</script>
+{% endblock %} 

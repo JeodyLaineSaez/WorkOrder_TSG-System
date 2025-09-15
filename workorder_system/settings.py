@@ -26,7 +26,7 @@ SECRET_KEY = 'django-insecure-a5jfsw5*%c6$9#9ieu=auhdw38w8+^b@g2v2o5!+np%a^03un-
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['tsg.pythonanywhere.com', 'localhost', '127.0.0.1']
 
 
 # Application definition
@@ -79,13 +79,14 @@ WSGI_APPLICATION = 'workorder_system.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'workorder_db',
+        'NAME': 'workorder1_db',
         'USER': 'tsg',
         'PASSWORD': '123nopassword',
         'HOST': 'localhost',
         'PORT': '5432',
     }
 }
+
 
 
 # Password validation
@@ -112,7 +113,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Asia/Manila'
 
 USE_I18N = True
 
@@ -122,7 +123,12 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
+
+# This is the directory where 'collectstatic' will gather all static files
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# Optional: Only needed during development, not in production
 STATICFILES_DIRS = [
     BASE_DIR / 'static',
 ]

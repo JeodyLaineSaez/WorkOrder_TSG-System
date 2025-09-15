@@ -14,17 +14,40 @@
                 <h6>Work Order Details</h6>
                 <ul class="list-group mb-3">
                     <li class="list-group-item"><strong>ID:</strong> WO-{{ work_order.id|stringformat:"06d" }}</li>
-                    <li class="list-group-item"><strong>Item:</strong> {{ work_order.item }}</li>
                     <li class="list-group-item"><strong>Campus:</strong> {{ work_order.campus.name }}</li>
                     <li class="list-group-item"><strong>Office:</strong> {{ work_order.office.name }}</li>
+                    <li class="list-group-item"><strong>Category:</strong> {{ work_order.category.name }}</li>
+                    <li class="list-group-item"><strong>Item:</strong> {{ work_order.item }}</li>
+                    <li class="list-group-item"><strong>Serial Number:</strong> {{ work_order.serial_number|default:'-' }}</li>
                     <li class="list-group-item"><strong>Type:</strong> {{ work_order.get_type_display }}{% if work_order.type == 'other' and work_order.other_type %} ({{ work_order.other_type }}){% endif %}</li>
                     <li class="list-group-item"><strong>Description:</strong> {{ work_order.issue_description }}</li>
                     <li class="list-group-item"><strong>Requested By:</strong> {{ work_order.requested_by.get_full_name }}</li>
-                    <li class="list-group-item"><strong>Date Requested:</strong> {{ work_order.date_requested|date:'M d, Y H:i' }}</li>
+                    <li class="list-group-item"><strong>Date Requested:</strong> {{ work_order.date_requested|date:'M d, Y g:i A' }} (PHT)</li>
                 </ul>
                 <form method="post">
                     {% csrf_token %}
-                    {{ form|crispy }}
+                    {% if user.is_tsg_staff %}
+                        <div class="row">
+                            <div class="col-md-6">
+                                {{ form.status|as_crispy_field }}
+                            </div>
+                            <div class="col-md-6">
+                                {{ form.date_requested|as_crispy_field }}
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                {{ form.requested_by_name|as_crispy_field }}
+                            </div>
+                            <div class="col-md-6">
+                                {{ form.serial_number|as_crispy_field }}
+                            </div>
+                        </div>
+                        {{ form.issue_description|as_crispy_field }}
+                        {{ form.remarks|as_crispy_field }}
+                    {% else %}
+                        {{ form|crispy }}
+                    {% endif %}
                     <div class="d-flex justify-content-between">
                         <a href="{% url 'dashboard' %}" class="btn btn-secondary">
                             <i class="bi bi-arrow-left"></i> Back to Dashboard

@@ -9,46 +9,21 @@
             <h4 class="mb-0"><i class="bi bi-eye"></i> Work Order Details</h4>
         </div>
         <div class="card-body">
-            <dl class="row">
-                <dt class="col-sm-3">Work Order ID</dt>
-                <dd class="col-sm-9">WO-{{ work_order.id|stringformat:"06d" }}</dd>
-
-                <dt class="col-sm-3">Item</dt>
-                <dd class="col-sm-9">{{ work_order.item }}</dd>
-
-                <dt class="col-sm-3">Campus</dt>
-                <dd class="col-sm-9">{{ work_order.campus.name }}</dd>
-
-                <dt class="col-sm-3">Office</dt>
-                <dd class="col-sm-9">{{ work_order.office.name }}</dd>
-
-                <dt class="col-sm-3">Requested By</dt>
-                <dd class="col-sm-9">{{ work_order.requested_by.get_full_name }}</dd>
-
-                <dt class="col-sm-3">Status</dt>
-                <dd class="col-sm-9">{{ work_order.get_status_display }}</dd>
-
-                <dt class="col-sm-3">Date Requested</dt>
-                <dd class="col-sm-9">{{ work_order.date_requested|date:'M d, Y H:i' }}</dd>
-
-                <dt class="col-sm-3">Issue Description</dt>
-                <dd class="col-sm-9">{{ work_order.issue_description }}</dd>
-
-                <dt class="col-sm-3">Remarks</dt>
-                <dd class="col-sm-9">{{ work_order.remarks|default:'-' }}</dd>
-
-                <dt class="col-sm-3">Date Completed</dt>
-                <dd class="col-sm-9">{{ work_order.date_completed|date:'M d, Y H:i' }}</dd>
-
-                <dt class="col-sm-3">Assigned Technician</dt>
-                <dd class="col-sm-9">
-                    {% if work_order.assigned_technician %}
-                        {{ work_order.assigned_technician.user.get_full_name }}
-                    {% else %}
-                        -
-                    {% endif %}
-                </dd>
-            </dl>
+            <ul class="list-group mb-3">
+                <li class="list-group-item"><strong>ID:</strong> WO-{{ work_order.id|stringformat:"06d" }}</li>
+                <li class="list-group-item"><strong>Campus:</strong> {{ work_order.campus.name }}</li>
+                <li class="list-group-item"><strong>Office:</strong> {{ work_order.office.name }}</li>
+                <li class="list-group-item"><strong>Category:</strong> {{ work_order.category.name }}</li>
+                <li class="list-group-item"><strong>Type:</strong> {{ work_order.get_type_display }}{% if work_order.type == 'other' and work_order.other_type %} ({{ work_order.other_type }}){% endif %}</li>
+                <li class="list-group-item"><strong>Item:</strong> {{ work_order.item }}</li>
+                <li class="list-group-item"><strong>Serial Number:</strong> {{ work_order.serial_number|default:'-' }}</li>
+                <li class="list-group-item"><strong>Description:</strong> {{ work_order.issue_description }}</li>
+                <li class="list-group-item"><strong>Requested By:</strong> {{ work_order.requested_by.get_full_name }}</li>
+                <li class="list-group-item"><strong>Date Requested:</strong> {{ work_order.date_requested|date:'M d, Y g:i A' }} (PHT)</li>
+                <li class="list-group-item"><strong>Assigned Technician:</strong> {% if work_order.assigned_technician %}{{ work_order.assigned_technician.user.get_full_name }}{% else %}-{% endif %}</li>
+                <li class="list-group-item"><strong>Date Completed:</strong> {{ work_order.date_completed|date:'M d, Y g:i A' }} (PHT)</li>
+                <li class="list-group-item"><strong>Remarks:</strong> {{ work_order.remarks|default:'-' }}</li>
+            </ul>
             <a href="{% url 'dashboard' %}" class="btn btn-secondary mt-3">
                 <i class="bi bi-arrow-left"></i> Back to Dashboard
             </a>

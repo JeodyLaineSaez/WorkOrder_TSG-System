@@ -1,15 +1,68 @@
 {% extends 'base.html' %}
+{% load workorder_filters %}
 
 {% block title %}Dashboard - Work Order System{% endblock %}
 
 {% block content %}
 <!-- Page Header -->
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <h2><i class="bi bi-speedometer2"></i> Dashboard</h2>
+    <div>
+        <h2><i class="bi bi-speedometer2"></i> Dashboard</h2>
+    </div>
     <a href="{% url 'create_work_order' %}" class="btn btn-primary">
         <i class="bi bi-plus-circle"></i> New Work Order
     </a>
 </div>
+
+<!-- Pending Work Orders Alert for TSG Staff Only -->
+{# This alert only shows for TSG staff users when there are pending work orders #}
+{% if user.is_tsg_staff and pending_work_orders > 0 %}
+    <div class="alert alert-warning alert-dismissible fade show" role="alert">
+        <div class="d-flex align-items-center">
+            <i class="bi bi-exclamation-triangle-fill me-2 fs-4"></i>
+            <div class="flex-grow-1">
+                <strong>Attention TSG Staff!</strong>
+                <br>
+                There are <strong>{{ pending_work_orders }}</strong> work order(s) that are not yet accepted and are pending in the work order queue.
+                {% if pending_work_orders <= 5 %}
+                    <br><small class="text-muted">Please review and assign technicians to these pending work orders.</small>
+                {% else %}
+                    <br><small class="text-muted">Please prioritize and assign technicians to these pending work orders as soon as possible.</small>
+                {% endif %}
+                
+                <!-- Show first few pending work orders -->
+                {% if pending_work_orders_list %}
+                    <div class="mt-2">
+                        <small class="text-muted"><strong>Recent pending work orders:</strong></small>
+                        <ul class="list-unstyled mt-1 mb-0">
+                            {% for wo in pending_work_orders_list|slice:":3" %}
+                                <li class="small">
+                                    <i class="bi bi-clock me-1"></i>
+                                    WO-{{ wo.id|stringformat:"06d" }} - {{ wo.item }} 
+                                    <span class="text-muted">({{ wo.date_requested|date:'M d, Y g:i A' }})</span>
+                                </li>
+                            {% endfor %}
+                            {% if pending_work_orders > 3 %}
+                                <li class="small text-muted">
+                                    <i class="bi bi-three-dots me-1"></i>
+                                    And {{ pending_work_orders|add:"-3" }} more pending work order(s)...
+                                </li>
+                            {% endif %}
+                        </ul>
+                    </div>
+                {% endif %}
+                
+                <!-- Quick action button -->
+                <div class="mt-2">
+                    <a href="{% url 'dashboard' %}?status=pending" class="btn btn-sm btn-outline-warning">
+                        <i class="bi bi-eye me-1"></i> View All Pending Work Orders
+                    </a>
+                </div>
+            </div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+{% endif %}
 
 <!-- Statistics Cards -->
 <div class="row mb-4">
@@ -62,15 +115,19 @@
     </div>
     
     <div class="col-md-3">
-        <div class="card bg-info text-white">
+        <div class="card bg-info text-white" data-bs-toggle="tooltip" data-bs-placement="top" 
+             title="Technicians with no ongoing work orders">
             <div class="card-body">
                 <div class="d-flex justify-content-between">
                     <div>
                         <h6 class="card-title">Available Technicians</h6>
                         <h3 class="mb-0">{{ available_technicians }}</h3>
+                        {% if busy_technicians > 0 %}
+                            <small class="text-light">({{ busy_technicians }} busy)</small>
+                        {% endif %}
                     </div>
                     <div class="align-self-center">
-                        <i class="bi bi-people fs-1"></i>
+                        <i class="bi bi-person-check fs-1"></i>
                     </div>
                 </div>
             </div>
@@ -89,15 +146,14 @@
                 <a href="{% url 'dashboard' %}" class="btn btn-outline-primary {% if not status_filter %}active{% endif %}">
                     All
                 </a>
-                <a href="{% url 'dashboard' %}?status=pending" class="btn btn-outline-warning {% if status_filter == 'pending' %}active{% endif %}">
-                    Pending
-                </a>
-                <a href="{% url 'dashboard' %}?status=on_going" class="btn btn-outline-info {% if status_filter == 'on_going' %}active{% endif %}">
-                    On Going
-                </a>
-                <a href="{% url 'dashboard' %}?status=completed" class="btn btn-outline-success {% if status_filter == 'completed' %}active{% endif %}">
-                    Completed
-                </a>
+                {% for status in work_order_statuses %}
+                    {% with status_name=status.name|lower %}
+                    <a href="{% url 'dashboard' %}?status={{ status_name }}" 
+                       class="btn {% if status_name == 'pending' %}btn-outline-warning{% elif status_name == 'on_going' %}btn-outline-info{% elif status_name == 'completed' %}btn-outline-success{% else %}btn-outline-secondary{% endif %} {% if status_filter == status_name %}active{% endif %}">
+                        {{ status.display_name }}
+                    </a>
+                    {% endwith %}
+                {% endfor %}
             </div>
         </div>
     </div>
@@ -109,12 +165,14 @@
                 <thead class="table-light">
                     <tr>
                         <th>ID</th>
-                        <th>Item</th>
                         <th>Campus</th>
                         <th>Office</th>
+                        <th>Category</th>
+                        <th>Type</th>
+                        <th>Item</th>
                         <th>Requested By</th>
-                        <th>Status</th>
                         <th>Date Requested</th>
+                        <th>Status</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -124,22 +182,24 @@
                         <td>
                             <span class="badge bg-secondary">WO-{{ work_order.id|stringformat:"06d" }}</span>
                         </td>
-                        <td>{{ work_order.item }}</td>
                         <td>{{ work_order.campus.name }}</td>
                         <td>{{ work_order.office.name }}</td>
+                        <td>{{ work_order.category.name }}</td>
+                        <td>{{ work_order.get_type_display }}</td>
+                        <td>{{ work_order.item }}</td>
                         <td>{{ work_order.requested_by.get_full_name }}</td>
+                        <td>{{ work_order.date_requested|date:"M d, Y g:i A" }} (PHT)</td>
                         <td>
-                            {% if work_order.status == 'pending' %}
-                                <span class="badge bg-warning">Pending</span>
-                            {% elif work_order.status == 'on_going' %}
-                                <span class="badge bg-info">On Going</span>
-                            {% elif work_order.status == 'completed' %}
-                                <span class="badge bg-success">Completed</span>
-                            {% elif work_order.status == 'cancelled' %}
+                            {% if work_order.status.name == 'pending' %}
+                                <span class="badge bg-warning">{{ work_order.status.display_name }}</span>
+                            {% elif work_order.status.name == 'on_going' %}
+                                <span class="badge bg-info">{{ work_order.status.display_name }}</span>
+                            {% elif work_order.status.name == 'completed' %}
+                                <span class="badge bg-success">{{ work_order.status.display_name }}</span>
+                            {% elif work_order.status.name == 'cancelled' %}
                                 <span class="badge bg-danger">Cancelled</span>
                             {% endif %}
                         </td>
-                        <td>{{ work_order.date_requested|date:"M d, Y" }}</td>
                         <td>
                             <div class="btn-group btn-group-sm" role="group">
                                 <a href="{% url 'work_order_detail' work_order.id %}" class="btn btn-outline-primary">
@@ -165,6 +225,12 @@
                                                 <i class="bi bi-pencil"></i>
                                             </a>
                                         {% endif %}
+                                    {% endif %}
+                                {% else %}
+                                    {% if user.is_tsg_staff %}
+                                        <a href="{% url 'export_work_order' work_order.id %}" class="btn btn-outline-success">
+                                            <i class="bi bi-download"></i>
+                                        </a>
                                     {% endif %}
                                 {% endif %}
                             </div>
@@ -216,4 +282,684 @@
         {% endif %}
     </div>
 </div>
-{% endblock %} 
+
+<!-- Divider between Work Orders and Analytics -->
+<hr class="my-5">
+
+<!-- Analytics Section - TSG Staff Only -->
+{% if user.is_tsg_staff %}
+
+<!-- Technician Status Details -->
+{% if currently_available_technicians or busy_technicians_list %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card shadow">
+            <div class="card-header bg-light">
+                <h6 class="mb-0">
+                    <i class="bi bi-person-gear"></i> Technician Availability Status
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <!-- Available Technicians -->
+                    {% if currently_available_technicians %}
+                    <div class="col-md-6">
+                        <h6 class="text-success mb-3">
+                            <i class="bi bi-check-circle"></i> Available Technicians ({{ currently_available_technicians|length }})
+                        </h6>
+                        <div class="list-group list-group-flush">
+                            {% for tech in currently_available_technicians %}
+                            <div class="list-group-item d-flex justify-content-between align-items-center border-success border-start border-4">
+                                <div>
+                                    <strong>{{ tech.name }}</strong>
+                                    {% if tech.specialization %}
+                                        <br><small class="text-muted">{{ tech.specialization }}</small>
+                                    {% endif %}
+                                </div>
+                                <span class="badge bg-success rounded-pill">{{ tech.completed_count }} completed</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    <!-- Busy Technicians -->
+                    {% if busy_technicians_list %}
+                    <div class="col-md-6">
+                        <h6 class="text-warning mb-3">
+                            <i class="bi bi-clock"></i> Busy Technicians ({{ busy_technicians_list|length }})
+                        </h6>
+                        <div class="list-group list-group-flush">
+                            {% for tech in busy_technicians_list %}
+                            <div class="list-group-item d-flex justify-content-between align-items-center border-warning border-start border-4">
+                                <div>
+                                    <strong>{{ tech.name }}</strong>
+                                    {% if tech.specialization %}
+                                        <br><small class="text-muted">{{ tech.specialization }}</small>
+                                    {% endif %}
+                                </div>
+                                <span class="badge bg-warning text-dark rounded-pill">{{ tech.ongoing_count }} ongoing</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<hr class="my-5">
+
+<!-- Work Order Distribution Summary -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card bg-light">
+            <div class="card-body text-center">
+                <h6 class="card-title text-muted">Total Categories</h6>
+                <h3 class="text-primary" id="totalCategories">0</h3>
+                <small class="text-muted">with active work orders</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card bg-light">
+            <div class="card-body text-center">
+                <h6 class="card-title text-muted">Active Offices</h6>
+                <h3 class="text-success" id="totalOffices">0</h3>
+                <small class="text-muted">with work order requests</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Work Order Distribution Charts -->
+<div class="row mb-5">
+    <div class="col-md-6">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="bi bi-pie-chart"></i> Work Orders by Category</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="categoryChart" height="300"></canvas>
+                <div class="mt-3">
+                    <small class="text-muted">
+                        <i class="bi bi-info-circle"></i> 
+                        Shows distribution of work orders across different categories for the selected period.
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card shadow">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0"><i class="bi bi-bar-chart"></i> Work Orders by Office</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="officeChart" height="300"></canvas>
+                <div class="mt-3">
+                    <small class="text-muted">
+                        <i class="bi bi-info-circle"></i> 
+                        Identifies high-demand offices and request sources for the selected period.
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h5><i class="bi bi-graph-up"></i> Technician Work Order Analytics</h5>
+        {% if selected_technician_name %}
+            <p class="text-muted mb-0">Showing data for: <strong>{{ selected_technician_name }}</strong></p>
+        {% endif %}
+    </div>
+    <form method="get" class="d-flex align-items-center gap-2">
+        <label for="period" class="me-2">View by:</label>
+        <select name="period" id="period" onchange="this.form.submit()" class="form-select d-inline-block w-auto">
+            <option value="week" {% if period == "week" %}selected{% endif %}>This Week</option>
+            <option value="month" {% if period == "month" %}selected{% endif %}>This Month</option>
+            <option value="year" {% if period == "year" %}selected{% endif %}>This Year</option>
+        </select>
+        <label for="technician" class="ms-3 me-2">Technician:</label>
+        <select name="technician" id="technician" onchange="this.form.submit()" class="form-select d-inline-block w-auto">
+            <option value="all" {% if selected_technician == "all" %}selected{% endif %}>All Technicians</option>
+            {% for tech in all_technicians %}
+                <option value="{{ tech.id }}" {% if selected_technician == tech.id|stringformat:'s' %}selected{% endif %}>{{ tech.user.get_full_name }}</option>
+            {% endfor %}
+        </select>
+        <!-- Preserve other GET parameters -->
+        {% for key, value in request.GET.items %}
+            {% if key != 'period' and key != 'technician' %}
+                <input type="hidden" name="{{ key }}" value="{{ value }}">
+            {% endif %}
+        {% endfor %}
+    </form>
+</div>
+
+<div class="card shadow">
+    <div class="card-body">
+        <canvas id="technicianChart" height="120"></canvas>
+    </div>
+</div>
+
+<!-- Analytics Summary -->
+<div class="row mt-4">
+    <div class="col-md-3">
+        <div class="card bg-light">
+            <div class="card-body text-center">
+                <h6 class="card-title text-muted">Total Work Orders</h6>
+                <h3 class="text-primary" id="totalWorkOrders">0</h3>
+                <small class="text-muted">in selected period</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-light">
+            <div class="card-body text-center">
+                <h6 class="card-title text-muted">Completed</h6>
+                <h3 class="text-success" id="completedWorkOrders">0</h3>
+                <small class="text-muted">successfully finished</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-light">
+            <div class="card-body text-center">
+                <h6 class="card-title text-muted">Pending</h6>
+                <h3 class="text-warning" id="pendingWorkOrders">0</h3>
+                <small class="text-muted">awaiting completion</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-light">
+            <div class="card-body text-center">
+                <h6 class="card-title text-muted">Avg Handling Time</h6>
+                <h3 class="text-info" id="avgHandlingTime">0</h3>
+                <small class="text-muted">hours per work order</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Average Handling Time Details -->
+{% if avg_handling_times %}
+<div class="row mt-3">
+    <div class="col-12">
+        <div class="card bg-light">
+            <div class="card-body">
+                <h6 class="card-title text-muted mb-3">
+                    <i class="bi bi-clock"></i> Average Handling Time per Technician
+                </h6>
+                <div class="table-responsive">
+                    <table class="table table-hover table-striped">
+                        <thead class="table-primary">
+                            <tr>
+                                <th scope="col" class="fw-bold">Technician Name</th>
+                                <th scope="col" class="text-end fw-bold">Average Hours</th>
+                                <th scope="col" class="text-center fw-bold">Completed Orders</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for tech_name, avg_time in avg_handling_times.items %}
+                            <tr>
+                                <td class="fw-medium align-middle">{{ tech_name }}</td>
+                                <td class="text-end align-middle">
+                                    {% if avg_time > 0 %}
+                                        <span class="badge bg-info fs-6">{{ avg_time }} hours</span>
+                                    {% else %}
+                                        <span class="text-muted fst-italic">No completed work orders</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-center align-middle">
+                                    {% with tech_data=technician_work_orders|get_item:tech_name %}
+                                        {% if tech_data %}
+                                            <span class="badge bg-success">{{ tech_data.completed_count }}</span>
+                                        {% else %}
+                                            <span class="text-muted">0</span>
+                                        {% endif %}
+                                    {% endwith %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Detailed Work Order Information -->
+{% if technician_work_orders %}
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h6 class="card-title mb-0">
+                    <i class="bi bi-list-check"></i> Detailed Work Order Information - Hours Spent per Completed Work Order
+                </h6>
+            </div>
+            <div class="card-body">
+                {% for tech_name, data in technician_work_orders.items %}
+                    {% if data.orders %}
+                    <div class="mb-4">
+                        <h6 class="text-primary border-bottom pb-2 mb-3">
+                            <i class="bi bi-person-gear"></i> {{ tech_name }}
+                        </h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered table-hover">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th scope="col" class="fw-bold">Work Order ID</th>
+                                        <th scope="col" class="fw-bold">Item</th>
+                                        <th scope="col" class="fw-bold text-center">Date Requested</th>
+                                        <th scope="col" class="fw-bold text-center">Date Assigned</th>
+                                        <th scope="col" class="fw-bold text-center">Date Completed</th>
+                                        <th scope="col" class="fw-bold text-center">Handling Time</th>
+                                        <th scope="col" class="fw-bold text-center">Total Time</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for order in data.orders %}
+                                    <tr>
+                                        <td class="fw-medium">
+                                            {% if order.work_order_id %}
+                                            <a href="{% url 'work_order_detail' order.work_order_id %}" class="text-primary text-decoration-none">
+                                                WO-{{ order.work_order_id|stringformat:"06d" }}
+                                            </a>
+                                            {% else %}
+                                            <span class="text-muted">N/A</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ order.item }}</td>
+                                        <td class="text-center">{{ order.date_requested|date:"M d, Y h:i A" }}</td>
+                                        <td class="text-center">
+                                            {% if order.date_assigned %}
+                                                {{ order.date_assigned|date:"M d, Y h:i A" }}
+                                            {% else %}
+                                                <span class="text-muted fst-italic">Not assigned</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-center">
+                                            {% if order.date_completed %}
+                                                {{ order.date_completed|date:"M d, Y h:i A" }}
+                                            {% else %}
+                                                <span class="text-muted fst-italic">Not completed</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-center">
+                                            {% if order.handling_time_hours is not None %}
+                                                <span class="badge bg-info text-white">{{ order.handling_time_hours|floatformat:2 }} hrs</span>
+                                            {% else %}
+                                                <span class="text-muted">-</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-center">
+                                            {% if order.total_time_hours is not None %}
+                                                <span class="badge bg-secondary">{{ order.total_time_hours|floatformat:2 }} hrs</span>
+                                            {% else %}
+                                                <span class="text-muted">-</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                            
+                            <!-- Pagination -->
+                            {% if data.paginator.num_pages > 1 %}
+                            <nav aria-label="Work order pagination" class="mt-3">
+                                <ul class="pagination justify-content-center">
+                                    {% if data.paginator.has_previous %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="?{% if request.GET.status %}status={{ request.GET.status }}&{% endif %}{% if request.GET.technician %}technician={{ request.GET.technician }}&{% endif %}page={{ data.paginator.previous_page_number }}">&laquo;</a>
+                                    </li>
+                                    {% else %}
+                                    <li class="page-item disabled">
+                                        <span class="page-link">&laquo;</span>
+                                    </li>
+                                    {% endif %}
+
+                                    {% for num in data.page_obj.paginator.page_range %}
+                                        {% if data.page_obj.number == num %}
+                                        <li class="page-item active">
+                                            <span class="page-link">{{ num }}</span>
+                                        </li>
+                                        {% else %}
+                                        <li class="page-item">
+                                            <a class="page-link" href="?{% if request.GET.status %}status={{ request.GET.status }}&{% endif %}{% if request.GET.technician %}technician={{ request.GET.technician }}&{% endif %}page={{ num }}">{{ num }}</a>
+                                        </li>
+                                        {% endif %}
+                                    {% endfor %}
+
+                                    {% if data.page_obj.has_next %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="?{% if request.GET.status %}status={{ request.GET.status }}&{% endif %}{% if request.GET.technician %}technician={{ request.GET.technician }}&{% endif %}page={{ data.page_obj.next_page_number }}">&raquo;</a>
+                                    </li>
+                                    {% else %}
+                                    <li class="page-item disabled">
+                                        <span class="page-link">&raquo;</span>
+                                    </li>
+                                    {% endif %}
+                                </ul>
+                            </nav>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    {% if user.is_tsg_staff %}
+    // Category Pie Chart
+    const categoryData = {{ category_data|safe }};
+    const categoryLabels = Object.keys(categoryData);
+    const categoryValues = Object.values(categoryData);
+    
+    // Generate colors for pie chart
+    const categoryColors = [
+        'rgba(255, 99, 132, 0.8)',
+        'rgba(54, 162, 235, 0.8)',
+        'rgba(255, 206, 86, 0.8)',
+        'rgba(75, 192, 192, 0.8)',
+        'rgba(153, 102, 255, 0.8)',
+        'rgba(255, 159, 64, 0.8)',
+        'rgba(199, 199, 199, 0.8)',
+        'rgba(83, 102, 255, 0.8)',
+        'rgba(255, 99, 132, 0.8)',
+        'rgba(54, 162, 235, 0.8)'
+    ];
+
+    if (categoryLabels.length > 0) {
+        const categoryCtx = document.getElementById('categoryChart').getContext('2d');
+        new Chart(categoryCtx, {
+            type: 'pie',
+            data: {
+                labels: categoryLabels,
+                datasets: [{
+                    data: categoryValues,
+                    backgroundColor: categoryColors.slice(0, categoryLabels.length),
+                    borderWidth: 2,
+                    borderColor: '#fff'
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            padding: 20,
+                            usePointStyle: true
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.label || '';
+                                const value = context.parsed;
+                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                const percentage = ((value / total) * 100).toFixed(1);
+                                return `${label}: ${value} (${percentage}%)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    } else {
+        document.getElementById('categoryChart').parentElement.innerHTML = 
+            '<div class="text-center py-5"><p class="text-muted">No category data available</p></div>';
+    }
+
+    // Office Bar Chart
+    const officeData = {{ office_data|safe }};
+    const officeLabels = Object.keys(officeData);
+    const officeValues = Object.values(officeData);
+
+    if (officeLabels.length > 0) {
+        const officeCtx = document.getElementById('officeChart').getContext('2d');
+        new Chart(officeCtx, {
+            type: 'bar',
+            data: {
+                labels: officeLabels,
+                datasets: [{
+                    label: 'Work Orders',
+                    data: officeValues,
+                    backgroundColor: 'rgba(40, 167, 69, 0.8)',
+                    borderColor: 'rgba(40, 167, 69, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return `Work Orders: ${context.parsed.y}`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Number of Work Orders'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Office'
+                        }
+                    }
+                }
+            }
+        });
+    } else {
+        document.getElementById('officeChart').parentElement.innerHTML = 
+            '<div class="text-center py-5"><p class="text-muted">No office data available</p></div>';
+    }
+
+    // Update summary statistics
+    document.getElementById('totalCategories').textContent = categoryLabels.length;
+    document.getElementById('totalOffices').textContent = officeLabels.length;
+
+    // Technician Analytics Chart (existing code)
+    // Prepare chart data from Django context
+    const chartData = {{ chart_data|safe }};
+    const allDates = {{ all_dates|safe }};
+    const period = '{{ period }}';
+    const selectedTechnician = '{{ selected_technician }}';
+    const selectedTechnicianName = '{{ selected_technician_name }}';
+
+    // Get technician names
+    const techNames = Object.keys(chartData);
+
+    // Prepare datasets for each status
+    const statuses = ['pending', 'on_going', 'completed'];
+    const statusLabels = {
+        'pending': 'Pending',
+        'on_going': 'On Going',
+        'completed': 'Completed'
+    };
+    const statusColors = {
+        'pending': 'rgba(255, 193, 7, 1)', // yellow
+        'on_going': 'rgba(23, 162, 184, 1)', // blue
+        'completed': 'rgba(40, 167, 69, 1)' // green
+    };
+
+    let datasets = [];
+    statuses.forEach(status => {
+        // For each technician, if 'all', sum across all techs; if filtered, just that tech
+        let data = allDates.map(date => {
+            let sum = 0;
+            techNames.forEach(tech => {
+                if (chartData[tech] && chartData[tech][date]) {
+                    sum += chartData[tech][date][status] || 0;
+                }
+            });
+            return sum;
+        });
+        datasets.push({
+            label: statusLabels[status],
+            data: data,
+            borderColor: statusColors[status],
+            backgroundColor: statusColors[status],
+            fill: false,
+            tension: 0.2
+        });
+    });
+
+    // Format dates for display
+    const formattedDates = allDates.map(dateStr => {
+        const date = new Date(dateStr);
+        if (period === 'week') {
+            return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+        } else if (period === 'month') {
+            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        } else {
+            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        }
+    });
+
+    const ctx = document.getElementById('technicianChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: formattedDates,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    display: true
+                },
+                title: {
+                    display: true,
+                    text: `Work Order Analytics - ${selectedTechnicianName} (${period.charAt(0).toUpperCase() + period.slice(1)})`
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Number of Work Orders'
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Date'
+                    }
+                }
+            }
+        }
+    });
+
+    // Update summary cards
+    let totalWorkOrders = 0;
+    let completedWorkOrders = 0;
+    let pendingWorkOrders = 0;
+
+    techNames.forEach(tech => {
+        allDates.forEach(date => {
+            if (chartData[tech] && chartData[tech][date]) {
+                totalWorkOrders += (chartData[tech][date].pending || 0) + (chartData[tech][date].on_going || 0) + (chartData[tech][date].completed || 0);
+                completedWorkOrders += chartData[tech][date].completed || 0;
+                pendingWorkOrders += (chartData[tech][date].pending || 0) + (chartData[tech][date].on_going || 0);
+            }
+        });
+    });
+
+    document.getElementById('totalWorkOrders').textContent = totalWorkOrders;
+    document.getElementById('completedWorkOrders').textContent = completedWorkOrders;
+    document.getElementById('pendingWorkOrders').textContent = pendingWorkOrders;
+
+    // Calculate and display average handling time
+    const avgHandlingTimes = {{ avg_handling_times|safe }};
+    let totalAvgTime = 0;
+    let techCount = 0;
+    
+    Object.values(avgHandlingTimes).forEach(time => {
+        if (time > 0) {
+            totalAvgTime += time;
+            techCount += 1;
+        }
+    });
+    
+    const overallAvgTime = techCount > 0 ? (totalAvgTime / techCount).toFixed(2) : 0;
+    document.getElementById('avgHandlingTime').textContent = overallAvgTime;
+    {% endif %}
+</script>
+
+{% endif %}
+
+{% endif %}
+
+<script>
+// Auto-refresh functionality - refresh page every 5 minutes if no user interaction
+(function() {
+    let lastActivity = Date.now();
+    const REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes in milliseconds
+    const INACTIVITY_THRESHOLD = 5 * 60 * 1000; // 5 minutes of inactivity
+    
+    // Track user activity
+    function updateActivity() {
+        lastActivity = Date.now();
+    }
+    
+    // Add event listeners for user interactions
+    const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'];
+    events.forEach(event => {
+        document.addEventListener(event, updateActivity, true);
+    });
+    
+    // Check if page should refresh
+    function checkForRefresh() {
+        const now = Date.now();
+        const timeSinceLastActivity = now - lastActivity;
+        
+        // If user has been inactive for 5 minutes, refresh the page
+        if (timeSinceLastActivity >= INACTIVITY_THRESHOLD) {
+            console.log('Auto-refreshing page due to inactivity...');
+            window.location.reload();
+        }
+    }
+    
+    // Check every minute
+    setInterval(checkForRefresh, 60 * 1000);
+    
+    // Also set up a fallback refresh every 5 minutes regardless of activity
+    // This ensures the page stays updated even if activity tracking fails
+    setInterval(() => {
+        console.log('Auto-refreshing page to keep data updated...');
+        window.location.reload();
+    }, REFRESH_INTERVAL);
+    
+    // Log when auto-refresh is enabled
+    console.log('Auto-refresh enabled: Page will refresh every 5 minutes or after 5 minutes of inactivity');
+})();
+</script>
+
+{% endblock %}

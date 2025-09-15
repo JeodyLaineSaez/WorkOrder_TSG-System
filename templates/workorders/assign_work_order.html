@@ -18,9 +18,10 @@
                     <li class="list-group-item"><strong>Campus:</strong> {{ work_order.campus.name }}</li>
                     <li class="list-group-item"><strong>Office:</strong> {{ work_order.office.name }}</li>
                     <li class="list-group-item"><strong>Type:</strong> {{ work_order.get_type_display }}{% if work_order.type == 'other' and work_order.other_type %} ({{ work_order.other_type }}){% endif %}</li>
+                    <li class="list-group-item"><strong>Category:</strong> {{ work_order.category }}</li>
                     <li class="list-group-item"><strong>Description:</strong> {{ work_order.issue_description }}</li>
                     <li class="list-group-item"><strong>Requested By:</strong> {{ work_order.requested_by.get_full_name }}</li>
-                    <li class="list-group-item"><strong>Date Requested:</strong> {{ work_order.date_requested|date:'M d, Y H:i' }}</li>
+                    <li class="list-group-item"><strong>Date Requested:</strong> {{ work_order.date_requested|date:'M d, Y g:i A' }} (PHT)</li>
                 </ul>
                 <form method="post" {% if work_order.assigned_technician %}class="disabled" onsubmit="return false;"{% endif %}>
                     {% csrf_token %}
